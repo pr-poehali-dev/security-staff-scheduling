@@ -23,6 +23,43 @@ const TYPE_COLORS = {
 } as const;
 
 const fmt = (n: number) => n.toLocaleString("ru-RU") + " ₽";
+
+// ─── Helpers: проверки сотрудников ────────────────────────────────────────────
+const TODAY = new Date();
+TODAY.setHours(0, 0, 0, 0);
+
+/** Возвращает дату истечения срока (дата проверки + 1 год) */
+function expiryDate(checkDate: string): Date | null {
+  if (!checkDate) return null;
+  const d = new Date(checkDate);
+  d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+
+/** Дней до истечения. Отрицательное значение = уже просрочено */
+function daysUntilExpiry(checkDate: string): number | null {
+  const exp = expiryDate(checkDate);
+  if (!exp) return null;
+  return Math.ceil((exp.getTime() - TODAY.getTime()) / 86_400_000);
+}
+
+type CheckStatus = "ok" | "warning" | "expired" | "missing";
+
+function checkStatus(checkDate: string): CheckStatus {
+  if (!checkDate) return "missing";
+  const days = daysUntilExpiry(checkDate);
+  if (days === null) return "missing";
+  if (days < 0)  return "expired";
+  if (days <= 30) return "warning";
+  return "ok";
+}
+
+function checkBadge(status: CheckStatus, days: number | null) {
+  if (status === "expired") return { label: "Просрочено",        cls: "text-red-400 bg-red-500/10 border-red-500/30" };
+  if (status === "warning") return { label: `${days} дн.`,       cls: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+  if (status === "missing") return { label: "Не указано",        cls: "text-muted-foreground bg-muted/40 border-border" };
+  return                          { label: `${days} дн.`,        cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30" };
+}
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 const inputCls = "w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors";
 
@@ -395,6 +432,7 @@ function FineReasonsModal({ onClose }: { onClose: () => void }) {
 // ─── Sections ─────────────────────────────────────────────────────────────────
 function Dashboard() {
   const { locations, employees, posts, fines, currentOrg } = useApp();
+  const [showAllChecks, setShowAllChecks] = useState(false);
   const active = employees.filter(e => e.status === "active").length;
   const covered = posts.filter(p => p.status === "covered").length;
   const vacant = posts.filter(p => p.status === "vacant").length;
@@ -459,6 +497,144 @@ function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── Виджет: проверки и комиссии ── */}
+      {(() => {
+        // Все сотрудники с проблемами: просрочено или истекает в ближайшие 30 дней
+        type EmpCheckRow = {
+          emp: typeof employees[0];
+          periodicDays: number | null;
+          periodicStatus: CheckStatus;
+          medDays: number | null;
+          medStatus: CheckStatus;
+          worst: CheckStatus;
+        };
+
+        const rows: EmpCheckRow[] = employees
+          .map(emp => {
+            const periodicDays = daysUntilExpiry(emp.periodicCheckDate);
+            const periodicStatus = checkStatus(emp.periodicCheckDate);
+            const medDays = daysUntilExpiry(emp.medCheckDate);
+            const medStatus = checkStatus(emp.medCheckDate);
+            const statusPriority = (s: CheckStatus) =>
+              s === "expired" ? 0 : s === "warning" ? 1 : s === "missing" ? 2 : 3;
+            const worst: CheckStatus =
+              statusPriority(periodicStatus) < statusPriority(medStatus) ? periodicStatus : medStatus;
+            return { emp, periodicDays, periodicStatus, medDays, medStatus, worst };
+          })
+          .filter(r => r.worst !== "ok")
+          .sort((a, b) => {
+            const p = (s: CheckStatus) => s === "expired" ? 0 : s === "warning" ? 1 : 2;
+            return p(a.worst) - p(b.worst);
+          });
+
+        if (rows.length === 0) return (
+          <div className="bg-card border border-emerald-500/20 rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Icon name="ShieldCheck" size={20} className="text-emerald-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Проверки актуальны</p>
+                <p className="text-xs text-muted-foreground">У всех сотрудников периодические проверки и медкомиссии в норме</p>
+              </div>
+            </div>
+          </div>
+        );
+
+        const expired = rows.filter(r => r.worst === "expired").length;
+        const warnings = rows.filter(r => r.worst === "warning").length;
+        const missing = rows.filter(r => r.worst === "missing").length;
+        const displayRows = showAllChecks ? rows : rows.slice(0, 5);
+
+        return (
+          <div className="bg-card border border-amber-500/20 rounded-xl overflow-hidden">
+            {/* Заголовок */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <Icon name="ClipboardCheck" size={20} className="text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">Проверки и комиссии — требуют внимания</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {expired > 0 && <span className="text-red-400 mr-3">● {expired} просрочено</span>}
+                    {warnings > 0 && <span className="text-amber-400 mr-3">● {warnings} истекает скоро</span>}
+                    {missing > 0 && <span className="text-muted-foreground">● {missing} не указано</span>}
+                  </p>
+                </div>
+              </div>
+              {rows.length > 5 && (
+                <button
+                  onClick={() => setShowAllChecks(v => !v)}
+                  className="text-xs text-primary hover:underline shrink-0"
+                >
+                  {showAllChecks ? "Свернуть" : `Показать всех (${rows.length})`}
+                </button>
+              )}
+            </div>
+
+            {/* Таблица */}
+            <div className="divide-y divide-border/50">
+              {/* Шапка */}
+              <div className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_160px_160px] gap-3 px-5 py-2 bg-muted/30">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Сотрудник</p>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Период. проверка</p>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Медкомиссия</p>
+              </div>
+
+              {displayRows.map(({ emp, periodicDays, periodicStatus, medDays, medStatus }) => {
+                const pBadge = checkBadge(periodicStatus, periodicDays);
+                const mBadge = checkBadge(medStatus, medDays);
+                const pExp = expiryDate(emp.periodicCheckDate);
+                const mExp = expiryDate(emp.medCheckDate);
+
+                return (
+                  <div
+                    key={emp.id}
+                    className="grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_160px_160px] gap-3 px-5 py-3 items-center hover:bg-muted/20 transition-colors"
+                  >
+                    {/* Сотрудник */}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                        {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{emp.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{emp.rank}</p>
+                      </div>
+                    </div>
+
+                    {/* Периодическая проверка */}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${pBadge.cls}`}>
+                        {periodicStatus === "expired" ? "Просрочена" : periodicStatus === "missing" ? "Не указана" : `${periodicDays} дн.`}
+                      </span>
+                      {pExp && (
+                        <span className="text-[9px] text-muted-foreground font-mono">
+                          до {pExp.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Медкомиссия */}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${mBadge.cls}`}>
+                        {medStatus === "expired" ? "Просрочена" : medStatus === "missing" ? "Не указана" : `${medDays} дн.`}
+                      </span>
+                      {mExp && (
+                        <span className="text-[9px] text-muted-foreground font-mono">
+                          до {mExp.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -890,6 +1066,7 @@ const EMPTY_EMP: EmpForm = {
   name: "", rank: "Охранник", status: "active", location: "—",
   shift: "08:00 – 20:00", phone: "", hireDate: "", yearsExp: 0, seniorityBonus: 0, note: "",
   extraShiftRate: 1.5,
+  periodicCheckDate: "", medCheckDate: "",
 };
 
 function EmployeeModal({ initial, onSave, onClose, title }: {
@@ -1003,6 +1180,35 @@ function EmployeeModal({ initial, onSave, onClose, title }: {
                 {form.yearsExp === 0 && <span className="text-muted-foreground">Стаж не указан</span>}
               </div>
             </div>
+          </div>
+
+          {/* Периодическая проверка и медкомиссия */}
+          <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Icon name="ClipboardCheck" size={14} className="text-blue-400" />
+              <p className="text-sm font-semibold text-foreground">Проверки и комиссии (действуют 1 год)</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Периодическая проверка">
+                <input
+                  type="date"
+                  value={form.periodicCheckDate}
+                  onChange={e => set("periodicCheckDate", e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Медицинская комиссия">
+                <input
+                  type="date"
+                  value={form.medCheckDate}
+                  onChange={e => set("medCheckDate", e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Указывайте дату последнего прохождения. Система автоматически рассчитает дату истечения (+1 год) и выдаст предупреждение за 30 дней.
+            </p>
           </div>
 
           {/* Примечание */}
@@ -1136,6 +1342,58 @@ function EmployeeSalaryCard({ employee, locations, onEdit, onClose }: {
               </div>
             ))}
           </div>
+
+          {/* ── Проверки и комиссии ── */}
+          {(() => {
+            const pDays = daysUntilExpiry(employee.periodicCheckDate);
+            const pStatus = checkStatus(employee.periodicCheckDate);
+            const mDays = daysUntilExpiry(employee.medCheckDate);
+            const mStatus = checkStatus(employee.medCheckDate);
+            const pExp = expiryDate(employee.periodicCheckDate);
+            const mExp = expiryDate(employee.medCheckDate);
+            const pBadge = checkBadge(pStatus, pDays);
+            const mBadge = checkBadge(mStatus, mDays);
+            const hasIssue = pStatus !== "ok" || mStatus !== "ok";
+
+            return (
+              <div className={`border rounded-xl overflow-hidden ${hasIssue ? "border-amber-500/30" : "border-border"}`}>
+                <div className={`px-4 py-2.5 flex items-center gap-2 border-b ${hasIssue ? "bg-amber-500/5 border-amber-500/20" : "bg-muted/30 border-border"}`}>
+                  <Icon name="ClipboardCheck" size={13} className={hasIssue ? "text-amber-400" : "text-muted-foreground"} />
+                  <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Проверки и комиссии</p>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {/* Периодическая проверка */}
+                  <div className="px-4 py-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Периодическая проверка</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {employee.periodicCheckDate
+                          ? `Дата: ${new Date(employee.periodicCheckDate).toLocaleDateString("ru-RU")} · истекает ${pExp?.toLocaleDateString("ru-RU") ?? "—"}`
+                          : "Дата не указана"}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${pBadge.cls}`}>
+                      {pStatus === "expired" ? "Просрочена" : pStatus === "missing" ? "Не указана" : pStatus === "ok" ? `${pDays} дн.` : `${pDays} дн.`}
+                    </span>
+                  </div>
+                  {/* Медкомиссия */}
+                  <div className="px-4 py-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Медицинская комиссия</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {employee.medCheckDate
+                          ? `Дата: ${new Date(employee.medCheckDate).toLocaleDateString("ru-RU")} · истекает ${mExp?.toLocaleDateString("ru-RU") ?? "—"}`
+                          : "Дата не указана"}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${mBadge.cls}`}>
+                      {mStatus === "expired" ? "Просрочена" : mStatus === "missing" ? "Не указана" : `${mDays} дн.`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Rate breakdown ── */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">

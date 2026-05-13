@@ -106,7 +106,9 @@ export interface Employee {
   yearsExp: number;
   seniorityBonus: number;
   note: string;
-  extraShiftRate: number;   // доп. коэффициент оплаты подработки (1.0 = стандарт, 1.5 = полтора)
+  extraShiftRate: number;      // коэффициент оплаты подработки
+  periodicCheckDate: string;   // дата последней периодической проверки (ISO date), действует 1 год
+  medCheckDate: string;        // дата последней медицинской комиссии (ISO date), действует 1 год
 }
 
 export interface Post {
