@@ -343,3 +343,280 @@ export function exportExcel(data: ExportReportData): void {
 
   XLSX.writeFile(wb, `SecureOps_Отчёт_${data.period.replace(/\s/g, "_")}.xlsx`);
 }
+
+// ─── Fines Report Types ───────────────────────────────────────────────────────
+export interface FinesReportRow {
+  date: string;
+  employeeName: string;
+  rank: string;
+  postName: string;
+  locationName: string;
+  reasonLabel: string;
+  note: string;
+  amount: number;
+}
+
+export interface FinesReportByEmployee {
+  name: string;
+  rank: string;
+  count: number;
+  total: number;
+}
+
+export interface FinesReportData {
+  orgName: string;
+  orgColor: string;
+  holdingName: string;
+  generatedAt: string;
+  filterLabel: string;          // "Все сотрудники" или имя конкретного
+  rows: FinesReportRow[];
+  byEmployee: FinesReportByEmployee[];
+  totalAmount: number;
+  totalCount: number;
+}
+
+// ─── Fines PDF ────────────────────────────────────────────────────────────────
+export function exportFinesPDF(data: FinesReportData): void {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const [r, g, b] = hexToRgb(data.orgColor);
+
+  // ── Header strip ────────────────────────────────────────────────────────
+  doc.setFillColor(r, g, b);
+  doc.rect(0, 0, W, 26, "F");
+
+  // Overlay dark semi-transparent for readability
+  doc.setFillColor(0, 0, 0);
+  doc.saveGraphicsState?.();
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(15);
+  doc.setFont("helvetica", "bold");
+  doc.text("SecureOps", 14, 10);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(220, 220, 255);
+  doc.text("Отчёт по штрафам и нарушениям", 14, 16);
+
+  doc.setTextColor(220, 220, 255);
+  doc.setFontSize(8);
+  doc.text(data.holdingName, W - 14, 10, { align: "right" });
+  doc.text(data.orgName, W - 14, 16, { align: "right" });
+  doc.text(`Сформирован: ${data.generatedAt}`, W - 14, 22, { align: "right" });
+
+  // ── Title ────────────────────────────────────────────────────────────────
+  doc.setTextColor(30, 30, 40);
+  doc.setFontSize(17);
+  doc.setFont("helvetica", "bold");
+  doc.text("Отчёт по штрафам", 14, 40);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100, 100, 110);
+  doc.text(`Организация: ${data.orgName}     Фильтр: ${data.filterLabel}`, 14, 47);
+
+  // ── KPI boxes ────────────────────────────────────────────────────────────
+  const kpis = [
+    { label: "Всего нарушений",   value: String(data.totalCount) },
+    { label: "Сумма штрафов",     value: fmtRub(data.totalAmount) },
+    { label: "Нарушителей",       value: String(data.byEmployee.length) },
+    { label: "Средний штраф",     value: data.totalCount > 0 ? fmtRub(Math.round(data.totalAmount / data.totalCount)) : "—" },
+  ];
+  const bW = (W - 28 - 3 * 4) / 4;
+  kpis.forEach((k, i) => {
+    const x = 14 + i * (bW + 4);
+    doc.setFillColor(r, g, b);
+    doc.setGState(doc.GState({ opacity: 0.08 }));
+    doc.roundedRect(x, 52, bW, 17, 2, 2, "F");
+    doc.setGState(doc.GState({ opacity: 1 }));
+    doc.setDrawColor(r, g, b);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(x, 52, bW, 17, 2, 2, "S");
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(r, g, b);
+    doc.text(k.value, x + bW / 2, 61, { align: "center" });
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 110);
+    doc.text(k.label, x + bW / 2, 66, { align: "center" });
+  });
+
+  // ── Top offenders table ──────────────────────────────────────────────────
+  const topY = 77;
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(30, 30, 40);
+  doc.text("Топ нарушителей", 14, topY);
+
+  autoTable(doc, {
+    startY: topY + 4,
+    head: [["#", "Сотрудник", "Должность", "Нарушений", "Сумма штрафов"]],
+    body: data.byEmployee
+      .sort((a, b2) => b2.total - a.total)
+      .slice(0, 8)
+      .map((e, i) => [
+        i + 1,
+        e.name,
+        e.rank,
+        e.count,
+        fmtRub(e.total),
+      ]),
+    styles: { fontSize: 9, cellPadding: 2.5 },
+    headStyles: { fillColor: [r, g, b], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [248, 248, 255] },
+    columnStyles: {
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 60 },
+      2: { cellWidth: 40 },
+      3: { halign: "center" },
+      4: { halign: "right", fontStyle: "bold" },
+    },
+    tableWidth: (W - 28) * 0.55,
+  });
+
+  // ── Detailed history table — new page ────────────────────────────────────
+  doc.addPage();
+
+  doc.setFillColor(r, g, b);
+  doc.rect(0, 0, W, 14, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${data.orgName} · Отчёт по штрафам · ${data.generatedAt}`, 14, 9);
+
+  doc.setTextColor(30, 30, 40);
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text("Полная история нарушений", 14, 26);
+
+  autoTable(doc, {
+    startY: 30,
+    head: [["Дата", "Сотрудник", "Должность", "Пост", "Объект", "Причина", "Примечание", "Штраф"]],
+    body: data.rows.map(row => [
+      row.date,
+      row.employeeName,
+      row.rank,
+      row.postName,
+      row.locationName,
+      row.reasonLabel,
+      row.note || "—",
+      fmtRub(row.amount),
+    ]),
+    foot: [["", "", "", "", "", "", "ИТОГО:", fmtRub(data.totalAmount)]],
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [30, 30, 40], textColor: [255, 255, 255], fontStyle: "bold" },
+    footStyles: { fillColor: [240, 240, 248], textColor: [30, 30, 40], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [250, 250, 255] },
+    columnStyles: {
+      0: { cellWidth: 20 },
+      1: { cellWidth: 42 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 28 },
+      5: { cellWidth: 40 },
+      6: { cellWidth: "auto" as unknown as number },
+      7: { halign: "right", fontStyle: "bold" },
+    },
+  });
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const total = doc.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(220, 220, 230);
+    doc.line(14, pageH - 10, W - 14, pageH - 10);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(150, 150, 160);
+    doc.text("SecureOps · Конфиденциально", 14, pageH - 5);
+    doc.text(`Страница ${i} из ${total}`, W - 14, pageH - 5, { align: "right" });
+  }
+
+  const safeName = data.orgName.replace(/[^а-яёa-z0-9]/gi, "_");
+  doc.save(`SecureOps_Штрафы_${safeName}_${data.generatedAt.replace(/\./g, "-")}.pdf`);
+}
+
+// ─── Fines Excel ──────────────────────────────────────────────────────────────
+export function exportFinesExcel(data: FinesReportData): void {
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: History ──────────────────────────────────────────────────────
+  const histData: (string | number)[][] = [
+    [`Отчёт по штрафам — ${data.orgName}`],
+    [`${data.holdingName}`, "", `Сформирован: ${data.generatedAt}`, "", `Фильтр: ${data.filterLabel}`],
+    [],
+    ["Дата", "Сотрудник", "Должность", "Пост", "Объект", "Причина нарушения", "Примечание", "Сумма штрафа (₽)"],
+    ...data.rows.map(r => [
+      r.date, r.employeeName, r.rank,
+      r.postName, r.locationName,
+      r.reasonLabel, r.note || "",
+      r.amount,
+    ]),
+    [],
+    ["", "", "", "", "", "", "ИТОГО:", data.totalAmount],
+  ];
+  const wsHist = XLSX.utils.aoa_to_sheet(histData);
+  wsHist["!cols"] = [
+    { wch: 12 }, { wch: 28 }, { wch: 18 },
+    { wch: 22 }, { wch: 22 },
+    { wch: 30 }, { wch: 24 }, { wch: 18 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsHist, "История нарушений");
+
+  // ── Sheet 2: By employee ──────────────────────────────────────────────────
+  const empData: (string | number)[][] = [
+    ["Сводка по сотрудникам"],
+    [`${data.orgName} · ${data.generatedAt}`],
+    [],
+    ["#", "Сотрудник", "Должность", "Нарушений", "Сумма штрафов (₽)", "Средний штраф (₽)"],
+    ...data.byEmployee
+      .sort((a, b) => b.total - a.total)
+      .map((e, i) => [
+        i + 1,
+        e.name,
+        e.rank,
+        e.count,
+        e.total,
+        e.count > 0 ? Math.round(e.total / e.count) : 0,
+      ]),
+    [],
+    ["", "ИТОГО", "", data.totalCount, data.totalAmount, data.totalCount > 0 ? Math.round(data.totalAmount / data.totalCount) : 0],
+  ];
+  const wsEmp = XLSX.utils.aoa_to_sheet(empData);
+  wsEmp["!cols"] = [
+    { wch: 5 }, { wch: 28 }, { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsEmp, "По сотрудникам");
+
+  // ── Sheet 3: By reason ────────────────────────────────────────────────────
+  const reasonMap: Record<string, { count: number; total: number }> = {};
+  data.rows.forEach(r => {
+    if (!reasonMap[r.reasonLabel]) reasonMap[r.reasonLabel] = { count: 0, total: 0 };
+    reasonMap[r.reasonLabel].count++;
+    reasonMap[r.reasonLabel].total += r.amount;
+  });
+  const reasonData: (string | number)[][] = [
+    ["Распределение по причинам нарушений"],
+    [`${data.orgName} · ${data.generatedAt}`],
+    [],
+    ["Причина нарушения", "Кол-во случаев", "Сумма штрафов (₽)", "Доля (%)"],
+    ...Object.entries(reasonMap)
+      .sort((a, b2) => b2[1].total - a[1].total)
+      .map(([label, v]) => [
+        label, v.count, v.total,
+        data.totalAmount > 0 ? Math.round((v.total / data.totalAmount) * 100) : 0,
+      ]),
+    [],
+    ["ИТОГО", data.totalCount, data.totalAmount, 100],
+  ];
+  const wsReason = XLSX.utils.aoa_to_sheet(reasonData);
+  wsReason["!cols"] = [{ wch: 34 }, { wch: 16 }, { wch: 20 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsReason, "По причинам");
+
+  const safeName = data.orgName.replace(/[^а-яёa-z0-9]/gi, "_");
+  XLSX.writeFile(wb, `SecureOps_Штрафы_${safeName}_${data.generatedAt.replace(/\./g, "-")}.xlsx`);
+}
