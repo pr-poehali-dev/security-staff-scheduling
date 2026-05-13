@@ -777,23 +777,52 @@ function ConfirmPostModal({ post, operatorName, onConfirm, onClose }: {
 function ClosePostModal({ post, onClose: onModalClose, onConfirm }: {
   post: Post;
   onClose: () => void;
-  onConfirm: (hours: number) => void;
+  onConfirm: (hours: number, note: string, fine: Omit<import("@/types").FineRecord, "id" | "date" | "postId" | "orgId"> | null) => void;
 }) {
-  // Calculate expected hours from scheduled time
+  const { fineReasons } = useApp();
   const expectedHours = parseShiftHours(post.time);
   const [hours, setHours] = useState(expectedHours > 0 ? expectedHours : 12);
+  const [note, setNote] = useState("");
+  const [withFine, setWithFine] = useState(false);
+  const [reasonId, setReasonId] = useState<number>(fineReasons[0]?.id ?? 1);
+  const [fineAmt, setFineAmt] = useState<number>(fineReasons[0]?.amount ?? 500);
+  const [fineNote, setFineNote] = useState("");
+
+  const handleReason = (id: number) => {
+    setReasonId(id);
+    const r = fineReasons.find(r => r.id === id);
+    if (r) setFineAmt(r.amount);
+  };
+
+  const handleSubmit = () => {
+    const fine = withFine && post.officerId ? {
+      employeeId: post.officerId,
+      reasonId,
+      note: fineNote,
+      amount: fineAmt,
+    } : null;
+    onConfirm(hours, note, fine);
+    onModalClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onModalClose}>
-      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm section-enter" onClick={e => e.stopPropagation()}>
-        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-          <Icon name="Timer" size={22} className="text-primary" />
+      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md section-enter space-y-4" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Icon name="Timer" size={20} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="font-bold text-foreground">Закрытие смены</h3>
+            <p className="text-xs text-muted-foreground">
+              {post.name}
+              {post.actualStartTime && <> · Заступил: <span className="font-mono">{post.actualStartTime}</span></>}
+            </p>
+          </div>
         </div>
-        <h3 className="font-bold text-lg text-foreground mb-1">Закрытие смены</h3>
-        <p className="text-sm text-muted-foreground mb-5">
-          Пост: <span className="text-foreground font-medium">{post.name}</span>
-          {post.actualStartTime && <> · Заступил: <span className="font-mono">{post.actualStartTime}</span></>}
-        </p>
+
+        {/* Часы */}
         <div>
           <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5 block">Фактически отработано часов</label>
           <div className="flex items-center gap-3">
@@ -818,9 +847,78 @@ function ClosePostModal({ post, onClose: onModalClose, onConfirm }: {
             </p>
           )}
         </div>
-        <div className="mt-5 flex gap-3">
+
+        {/* Причина закрытия */}
+        <div>
+          <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5 block">Причина закрытия (необязательно)</label>
+          <input
+            type="text"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Комментарий к закрытию смены..."
+            className="w-full bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+          />
+        </div>
+
+        {/* Штраф */}
+        {post.officerId && (
+          <div className={`rounded-xl border transition-all ${withFine ? "border-red-500/30 bg-red-500/5 p-3 space-y-3" : "border-border/40 bg-muted/20 p-3"}`}>
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <div
+                onClick={() => setWithFine(v => !v)}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-all ${withFine ? "bg-red-500 border-red-500" : "border-border"}`}
+              >
+                {withFine && <Icon name="Check" size={10} className="text-white" />}
+              </div>
+              <span className="text-sm text-foreground font-medium">Применить штраф к сотруднику</span>
+            </label>
+
+            {withFine && (
+              <div className="space-y-2.5">
+                {/* Причина штрафа */}
+                {fineReasons.length > 0 && (
+                  <div>
+                    <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">Причина штрафа</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {fineReasons.map(r => (
+                        <button key={r.id} onClick={() => handleReason(r.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${reasonId === r.id ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-muted border-border text-muted-foreground hover:text-foreground"}`}>
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Сумма */}
+                <div>
+                  <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">Сумма штрафа, ₽</label>
+                  <input
+                    type="number" min={0} step={100}
+                    value={fineAmt}
+                    onChange={e => setFineAmt(Number(e.target.value))}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-red-500/50"
+                  />
+                </div>
+                {/* Комментарий штрафа */}
+                <div>
+                  <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">Комментарий</label>
+                  <input
+                    type="text"
+                    value={fineNote}
+                    onChange={e => setFineNote(e.target.value)}
+                    placeholder="Пояснение к штрафу..."
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-red-500/50"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-1">
           <button
-            onClick={() => { onConfirm(hours); onModalClose(); }}
+            onClick={handleSubmit}
             className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
           >
             Закрыть смену
@@ -842,6 +940,24 @@ function Placements() {
   const [fineSettings, setFineSettings] = useState(false);
 
   const operatorName = session?.user.name ?? "Оператор";
+
+  // Автозакрытие смены по расписанию объекта
+  useEffect(() => {
+    const nowStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    posts.forEach(p => {
+      // Только подтверждённые, ещё не закрытые посты
+      if (p.confirmedAt === null || p.actualHours !== null) return;
+      // Парсим время окончания смены из post.time (формат "HH:MM – HH:MM")
+      const m = p.time.match(/(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})/);
+      if (!m) return;
+      const endTime = `${m[3]}:${m[4]}`;
+      // Если текущее время >= времени окончания
+      if (nowStr >= endTime) {
+        const expectedHours = parseShiftHours(p.time);
+        closePost(p.id, expectedHours > 0 ? expectedHours : 12, "auto", "Закрыто автоматически по расписанию", null);
+      }
+    });
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Summary stats
   const confirmed = posts.filter(p => p.confirmedAt !== null).length;
@@ -985,10 +1101,20 @@ function Placements() {
                             Оператор: {post.confirmedBy}
                           </p>
                           {isClosed && (
-                            <p className="text-[10px] text-blue-400 flex items-center gap-1">
-                              <Icon name="Timer" size={9} />
-                              Отработано: <span className="font-mono font-semibold">{post.actualHours} ч</span>
-                            </p>
+                            <>
+                              <p className="text-[10px] text-blue-400 flex items-center gap-1">
+                                <Icon name="Timer" size={9} />
+                                Отработано: <span className="font-mono font-semibold">{post.actualHours} ч</span>
+                                {post.closeReason === "auto" && <span className="text-muted-foreground/70">(авто)</span>}
+                                {post.closeReason === "manual" && <span className="text-muted-foreground/70">(вручную)</span>}
+                              </p>
+                              {post.closeNote && (
+                                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Icon name="MessageSquare" size={9} />
+                                  {post.closeNote}
+                                </p>
+                              )}
+                            </>
                           )}
                           {/* Подработка */}
                           {post.isExtraShift && (
@@ -1072,7 +1198,7 @@ function Placements() {
       {closingPost && (
         <ClosePostModal
           post={closingPost}
-          onConfirm={h => closePost(closingPost.id, h)}
+          onConfirm={(h, note, fine) => closePost(closingPost.id, h, "manual", note, fine)}
           onClose={() => setClosingPost(null)}
         />
       )}

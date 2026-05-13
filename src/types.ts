@@ -125,6 +125,10 @@ export interface Post {
   confirmedBy: string | null;
   actualStartTime: string | null;
   actualHours: number | null;
+  // Закрытие смены
+  closedAt: string | null;      // ISO datetime закрытия смены
+  closeReason: "auto" | "manual" | null; // auto = по расписанию, manual = вручную оператором
+  closeNote: string | null;     // причина / комментарий при ручном закрытии
 }
 
 export interface FineReason {

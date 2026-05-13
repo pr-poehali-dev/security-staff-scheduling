@@ -53,7 +53,7 @@ interface AppContextValue {
   posts: Post[];
   assignPost: (postId: number, officerId: number | null, fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null) => void;
   confirmPost: (postId: number, actualStartTime: string, confirmedBy: string) => void;
-  closePost: (postId: number, actualHours: number) => void;
+  closePost: (postId: number, actualHours: number, reason: "auto" | "manual", note: string, fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null) => void;
 
   fineReasons: FineReason[];
   setFineReasons: (reasons: FineReason[]) => void;
@@ -236,11 +236,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ));
   };
 
-  // Оператор закрывает смену — фиксирует фактически отработанные часы
-  const closePost = (postId: number, actualHours: number) => {
+  // Оператор закрывает смену — фиксирует фактически отработанные часы, причину, штраф
+  const closePost = (
+    postId: number,
+    actualHours: number,
+    reason: "auto" | "manual",
+    note: string,
+    fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null,
+  ) => {
+    const closedAt = new Date().toISOString();
     setAllPosts(prev => prev.map(p =>
-      p.id !== postId ? p : { ...p, actualHours }
+      p.id !== postId ? p : { ...p, actualHours, closedAt, closeReason: reason, closeNote: note || null }
     ));
+
+    // Сотрудник со статусом "active" → "off" после завершения смены
+    const post = allPosts.find(p => p.id === postId);
+    if (post?.officerId) {
+      const emp = allEmployees.find(e => e.id === post.officerId);
+      if (emp && (emp.status === "active" || emp.status === "extra")) {
+        setAllEmployees(prev => prev.map(e =>
+          e.id === emp.id ? { ...e, status: "off" as const } : e
+        ));
+      }
+    }
+
+    // Штраф при закрытии
+    if (fine) {
+      const today = new Date().toISOString().slice(0, 10);
+      setAllFines(prev => [...prev, { id: maxId(prev) + 1, orgId: currentOrgId, date: today, postId, ...fine }]);
+    }
   };
 
   const setFineReasons = (reasons: FineReason[]) =>
