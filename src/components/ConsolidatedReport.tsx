@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import Icon from "@/components/ui/icon";
+import { exportPDF, exportExcel, type ExportReportData } from "@/lib/export";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 const fmt = (n: number) => n.toLocaleString("ru-RU") + " ₽";
@@ -170,6 +171,76 @@ export default function ConsolidatedReport() {
     { key: "incidents",  label: "Нарушения",  icon: "AlertTriangle" },
   ] as const;
 
+  // ── Export helpers ────────────────────────────────────────────────────────
+  const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+  const { holding } = useApp();
+
+  const buildExportData = (): ExportReportData => {
+    const periodLabel =
+      period === "month" ? "Январь — Май 2026 (по месяцам)"
+      : period === "quarter" ? "I–II квартал 2026"
+      : "Сводная оценка 2026";
+
+    const visibleOrgs = orgs.filter(o => activeOrgs.has(o.id));
+
+    const summaryRows = visibleOrgs.map(org => {
+      const yearData = monthlyData.map(md => md.orgs.find(o => o.orgId === org.id)!);
+      const avgCov = Math.round(yearData.reduce((a, d) => a + d.coverage, 0) / yearData.length);
+      const avgAtt = Math.round(yearData.reduce((a, d) => a + d.attendance, 0) / yearData.length);
+      const totInc = yearData.reduce((a, d) => a + d.incidents, 0);
+      const totFines = yearData.reduce((a, d) => a + d.finesAmt, 0);
+      const totHours = yearData.reduce((a, d) => a + d.hoursWorked, 0);
+      const score = Math.round(avgCov * 0.4 + avgAtt * 0.4 + Math.max(0, 100 - totInc * 10) * 0.2);
+      const grade = score >= 90 ? "A" : score >= 75 ? "B" : "C";
+      return { orgName: org.name, orgColor: org.color, coverage: avgCov, attendance: avgAtt, incidents: totInc, finesAmt: totFines, hoursWorked: totHours, score, grade };
+    });
+
+    const totalCoverage = Math.round(summaryRows.reduce((s, r) => s + r.coverage, 0) / Math.max(summaryRows.length, 1));
+    const totalAttendance = Math.round(summaryRows.reduce((s, r) => s + r.attendance, 0) / Math.max(summaryRows.length, 1));
+    const totalIncidents = summaryRows.reduce((s, r) => s + r.incidents, 0);
+    const totalFines = summaryRows.reduce((s, r) => s + r.finesAmt, 0);
+    const totalHours = summaryRows.reduce((s, r) => s + r.hoursWorked, 0);
+
+    const monthlyRows = visibleOrgs.map(org => {
+      const rows = monthlyData.map(md => md.orgs.find(o => o.orgId === org.id)!);
+      return {
+        orgName: org.name,
+        coverage: rows.map(r => r.coverage),
+        attendance: rows.map(r => r.attendance),
+        incidents: rows.map(r => r.incidents),
+        finesAmt: rows.map(r => r.finesAmt),
+      };
+    });
+
+    return {
+      holdingName: holding.name,
+      inn: holding.inn,
+      generatedAt: new Date().toLocaleDateString("ru-RU"),
+      period: periodLabel,
+      summaryRows,
+      monthLabels: months.map(m => m.label),
+      monthlyRows,
+      totalCoverage,
+      totalAttendance,
+      totalIncidents,
+      totalFines,
+      totalHours,
+    };
+  };
+
+  const handleExport = async (format: "pdf" | "xlsx") => {
+    setExporting(format);
+    setExportMenuOpen(false);
+    // small delay to let the UI show loading state
+    await new Promise(r => setTimeout(r, 80));
+    const data = buildExportData();
+    if (format === "pdf") exportPDF(data);
+    else exportExcel(data);
+    setExporting(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Controls ────────────────────────────────────────────────────────── */}
@@ -186,8 +257,9 @@ export default function ConsolidatedReport() {
             </button>
           ))}
         </div>
-        {/* Org filter */}
-        <div className="flex gap-2 flex-wrap">
+
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Org filter */}
           {orgs.map(org => (
             <button
               key={org.id}
@@ -199,6 +271,49 @@ export default function ConsolidatedReport() {
               {org.shortName}
             </button>
           ))}
+
+          {/* Export button */}
+          <div className="relative">
+            <button
+              onClick={() => setExportMenuOpen(v => !v)}
+              disabled={!!exporting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+            >
+              {exporting
+                ? <><Icon name="Loader2" size={14} className="animate-spin" /> Генерация...</>
+                : <><Icon name="Download" size={14} /> Экспорт <Icon name="ChevronDown" size={12} /></>
+              }
+            </button>
+            {exportMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden z-50 w-44">
+                <button
+                  onClick={() => handleExport("pdf")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                    <Icon name="FileText" size={14} className="text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">PDF</p>
+                    <p className="text-[10px] text-muted-foreground">Готовый документ</p>
+                  </div>
+                </button>
+                <div className="h-px bg-border mx-3" />
+                <button
+                  onClick={() => handleExport("xlsx")}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                    <Icon name="Table" size={14} className="text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Excel</p>
+                    <p className="text-[10px] text-muted-foreground">5 листов с данными</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
