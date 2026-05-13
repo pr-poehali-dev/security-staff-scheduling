@@ -1772,8 +1772,14 @@ function Employees() {
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center">
-          <Icon name="Users" size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
-          <p className="text-sm text-muted-foreground">{search ? "Ничего не найдено" : "Нет сотрудников в этой категории"}</p>
+          <Icon name={filter === "extra" ? "Star" : "Users"} size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
+          <p className="text-sm text-muted-foreground">
+            {search
+              ? "Ничего не найдено"
+              : filter === "extra"
+              ? "Сотрудников на подработке нет. Назначьте выходного сотрудника на пост — его статус изменится автоматически"
+              : "Нет сотрудников в этой категории"}
+          </p>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-xl overflow-hidden">

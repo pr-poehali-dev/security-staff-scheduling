@@ -178,12 +178,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     officerId: number | null,
     fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null
   ) => {
+    // Определяем: новый сотрудник — на выходном/подработке?
+    const newEmp = officerId !== null
+      ? allEmployees.find(e => e.id === officerId)
+      : null;
+    const isExtraShift = newEmp?.status === "off" || newEmp?.status === "extra";
+
     setAllPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       const status: Post["status"] = officerId !== null ? "covered" : "vacant";
-      // сброс подтверждения при переназначении
-      return { ...p, officerId, status, confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null };
+      return {
+        ...p,
+        officerId,
+        status,
+        isExtraShift: isExtraShift ?? false,
+        confirmedAt: null,
+        confirmedBy: null,
+        actualStartTime: null,
+        actualHours: null,
+      };
     }));
+
+    // Переводим сотрудника в статус "extra" если он выходной и его назначили
+    if (newEmp && (newEmp.status === "off")) {
+      setAllEmployees(prev => prev.map(e =>
+        e.id === newEmp.id ? { ...e, status: "extra" as const } : e
+      ));
+    }
+
+    // При замене или снятии — возвращаем предыдущего "extra" → "off"
+    const post = allPosts.find(p => p.id === postId);
+    if (post?.officerId && post.officerId !== officerId) {
+      const prevEmp = allEmployees.find(e => e.id === post.officerId);
+      if (prevEmp?.status === "extra") {
+        setAllEmployees(prev => prev.map(e =>
+          e.id === prevEmp.id ? { ...e, status: "off" as const } : e
+        ));
+      }
+    }
+
     if (fine) {
       const today = new Date().toISOString().slice(0, 10);
       setAllFines(prev => [...prev, { id: maxId(prev) + 1, orgId: currentOrgId, date: today, postId, ...fine }]);
