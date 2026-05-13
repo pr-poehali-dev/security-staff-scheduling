@@ -556,13 +556,219 @@ function EmployeeDeleteModal({ name, onConfirm, onClose }: { name: string; onCon
 }
 
 // ─── Employees Section ────────────────────────────────────────────────────────
+// ─── Salary helpers ───────────────────────────────────────────────────────────
+function parseShiftHours(shift: string): number {
+  // "08:00 – 20:00" → 12, "20:00 – 08:00" → 12
+  const m = shift.match(/(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  const start = parseInt(m[1]) * 60 + parseInt(m[2]);
+  let end = parseInt(m[3]) * 60 + parseInt(m[4]);
+  if (end <= start) end += 24 * 60;
+  return (end - start) / 60;
+}
+
+function calcSalary(hourlyTotal: number, shiftHours: number, shiftsPerMonth: number) {
+  const perShift = hourlyTotal * shiftHours;
+  const perMonth = perShift * shiftsPerMonth;
+  return { perShift, perMonth };
+}
+
+// ─── Employee Salary Card ─────────────────────────────────────────────────────
+function EmployeeSalaryCard({ employee, locations, onEdit, onClose }: {
+  employee: import("@/types").Employee;
+  locations: import("@/types").Location[];
+  onEdit: () => void;
+  onClose: () => void;
+}) {
+  const loc = locations.find(l => employee.location.startsWith(l.name));
+  const baseRate = loc?.hourlyRate ?? 0;
+  const totalRate = baseRate + employee.seniorityBonus;
+  const shiftHours = parseShiftHours(employee.shift);
+
+  // Configurable in card
+  const [shiftsPerMonth, setShiftsPerMonth] = useState(15);
+  const { perShift, perMonth } = calcSalary(totalRate, shiftHours, shiftsPerMonth);
+
+  const fmtRub = (n: number) => n.toLocaleString("ru-RU") + " ₽";
+  const initials = employee.name.split(" ").map(n => n[0]).join("").slice(0, 2);
+
+  const badge = (s: "active" | "off" | "sick") =>
+    s === "active" ? <span className="badge-active">На смене</span>
+    : s === "sick"   ? <span className="badge-danger">Больничный</span>
+    : <span className="badge-inactive">Выходной</span>;
+
+  const hireYear = employee.hireDate ? new Date(employee.hireDate).getFullYear() : null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div
+        className="bg-card border border-border w-full sm:max-w-md max-h-[92vh] flex flex-col rounded-t-2xl sm:rounded-2xl section-enter"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-start gap-4 p-5 border-b border-border shrink-0">
+          <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-foreground leading-tight">{employee.name}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{employee.rank} · {employee.phone}</p>
+            <div className="mt-1.5">{badge(employee.status)}</div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground shrink-0 mt-0.5">
+            <Icon name="X" size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* ── Info block ── */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Объект", val: loc?.name ?? "Не назначен", icon: "Building2" },
+              { label: "График", val: employee.shift, icon: "Clock" },
+              { label: "Стаж", val: `${employee.yearsExp} лет${employee.yearsExp >= 10 ? " 🏅" : ""}`, icon: "Award" },
+              { label: "Принят", val: hireYear ? `${hireYear} г.` : "—", icon: "CalendarDays" },
+            ].map(s => (
+              <div key={s.label} className="flex items-start gap-2.5 p-3 bg-muted/40 rounded-xl">
+                <Icon name={s.icon} size={14} className="text-muted-foreground shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</p>
+                  <p className="text-sm text-foreground font-medium truncate">{s.val}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Rate breakdown ── */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border bg-muted/30">
+              <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Ставка ₽/час</p>
+            </div>
+            <div className="divide-y divide-border/60">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-primary/60" />
+                  <span className="text-sm text-muted-foreground">Тариф объекта</span>
+                  {loc && <span className="text-[10px] text-muted-foreground">({loc.name})</span>}
+                </div>
+                <span className="text-sm font-mono text-foreground">{baseRate > 0 ? `${baseRate} ₽/ч` : "—"}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-sm text-muted-foreground">Надбавка за выслугу</span>
+                </div>
+                <span className="text-sm font-mono text-amber-400">
+                  {employee.seniorityBonus > 0 ? `+${employee.seniorityBonus} ₽/ч` : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 bg-emerald-500/5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-sm font-semibold text-foreground">Итоговая ставка</span>
+                </div>
+                <span className="text-base font-mono font-bold text-emerald-400">{totalRate > 0 ? `${totalRate} ₽/ч` : "—"}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Salary calculator ── */}
+          {totalRate > 0 && shiftHours > 0 && (
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
+                <Icon name="Calculator" size={14} className="text-primary" />
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Расчёт зарплаты</p>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Shift hours display */}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Часов в смене</span>
+                  <span className="font-mono text-foreground font-semibold">{shiftHours} ч</span>
+                </div>
+
+                {/* Shifts per month slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-muted-foreground">Смен в месяц</span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => setShiftsPerMonth(s => Math.max(1, s - 1))} className="w-6 h-6 rounded-lg bg-muted hover:bg-secondary flex items-center justify-center text-foreground transition-colors">
+                        <Icon name="Minus" size={12} />
+                      </button>
+                      <span className="w-6 text-center font-mono font-bold text-foreground text-sm">{shiftsPerMonth}</span>
+                      <button onClick={() => setShiftsPerMonth(s => Math.min(31, s + 1))} className="w-6 h-6 rounded-lg bg-muted hover:bg-secondary flex items-center justify-center text-foreground transition-colors">
+                        <Icon name="Plus" size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="range" min={1} max={31} value={shiftsPerMonth}
+                    onChange={e => setShiftsPerMonth(Number(e.target.value))}
+                    className="w-full accent-primary h-1.5 rounded-full"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    <span>1</span><span>15</span><span>31</span>
+                  </div>
+                </div>
+
+                {/* Results */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
+                    <div>
+                      <p className="text-xs text-muted-foreground">За 1 смену ({shiftHours}ч × {totalRate}₽)</p>
+                      <p className="text-base font-bold font-mono text-foreground mt-0.5">{fmtRub(perShift)}</p>
+                    </div>
+                    <Icon name="Sun" size={18} className="text-muted-foreground" />
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-primary/10 border border-primary/20 rounded-xl">
+                    <div>
+                      <p className="text-xs text-muted-foreground">За месяц ({shiftsPerMonth} смен)</p>
+                      <p className="text-xl font-bold font-mono text-primary mt-0.5">{fmtRub(perMonth)}</p>
+                    </div>
+                    <Icon name="Banknote" size={22} className="text-primary" />
+                  </div>
+                </div>
+
+                {/* Annual estimate */}
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/30 rounded-lg text-xs text-muted-foreground">
+                  <span>Годовой фонд (оценочно)</span>
+                  <span className="font-mono font-semibold text-foreground">{fmtRub(perMonth * 12)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Note */}
+          {employee.note && (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+              <Icon name="StickyNote" size={14} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground">{employee.note}</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex gap-3 p-5 border-t border-border shrink-0">
+          <button onClick={onEdit} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90">
+            <Icon name="Pencil" size={15} /> Редактировать
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-secondary">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Employees Section ────────────────────────────────────────────────────────
 function Employees() {
   const { employees, addEmployee, editEmployee, deleteEmployee, locations, can } = useApp();
   const canEdit = can("employees:edit");
 
   const [filter, setFilter] = useState<"all" | "active" | "off" | "sick">("all");
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState<"add" | "edit" | "delete" | null>(null);
+  const [modal, setModal] = useState<"add" | "edit" | "delete" | "card" | null>(null);
   const [target, setTarget] = useState<import("@/types").Employee | null>(null);
   const close = () => { setModal(null); setTarget(null); };
 
@@ -575,17 +781,7 @@ function Employees() {
     : s === "sick" ? <span className="badge-danger">Больничный</span>
     : <span className="badge-inactive">Выходной</span>;
 
-  const fmtBonus = (n: number) => n > 0 ? `+${n} ₽/ч` : "—";
-  const fmtRate = (e: import("@/types").Employee) => {
-    const post = locations.find(l => l.id === undefined); // placeholder — see below
-    void post;
-    return e.seniorityBonus > 0 ? `${e.seniorityBonus} ₽/ч` : "—";
-  };
-  void fmtRate;
-
-  // Total rate = object rate + seniority bonus (derived from post assignment)
   const getEffectiveRate = (e: import("@/types").Employee) => {
-    // find object by name match in location field
     const loc = locations.find(l => e.location.startsWith(l.name));
     const base = loc?.hourlyRate ?? 0;
     return { base, bonus: e.seniorityBonus, total: base + e.seniorityBonus };
@@ -652,7 +848,11 @@ function Employees() {
                 {filtered.map(e => {
                   const rate = getEffectiveRate(e);
                   return (
-                    <tr key={e.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors group">
+                    <tr
+                      key={e.id}
+                      className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors group cursor-pointer"
+                      onClick={() => { setTarget(e); setModal("card"); }}
+                    >
                       {/* Имя */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
@@ -696,17 +896,20 @@ function Employees() {
                           : <span className="text-xs text-muted-foreground">—</span>}
                       </td>
                       {/* Actions */}
-                      <td className="px-4 py-3.5">
-                        {canEdit && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <td className="px-4 py-3.5" onClick={ev => ev.stopPropagation()}>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setTarget(e); setModal("card"); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors" title="Карточка и расчёт зарплаты">
+                            <Icon name="Calculator" size={14} />
+                          </button>
+                          {canEdit && <>
                             <button onClick={() => { setTarget(e); setModal("edit"); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                               <Icon name="Pencil" size={14} />
                             </button>
                             <button onClick={() => { setTarget(e); setModal("delete"); }} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
                               <Icon name="Trash2" size={14} />
                             </button>
-                          </div>
-                        )}
+                          </>}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -725,6 +928,14 @@ function Employees() {
       </div>
 
       {/* Modals */}
+      {modal === "card" && target && (
+        <EmployeeSalaryCard
+          employee={target}
+          locations={locations}
+          onEdit={() => setModal("edit")}
+          onClose={close}
+        />
+      )}
       {modal === "add" && (
         <EmployeeModal title="Новый сотрудник" initial={null} onSave={d => { addEmployee(d); close(); }} onClose={close} />
       )}
