@@ -116,6 +116,11 @@ export interface Post {
   officerId: number | null;
   time: string;
   status: "covered" | "vacant" | "alert";
+  // Фактическое заступление
+  confirmedAt: string | null;    // ISO datetime — когда оператор подтвердил
+  confirmedBy: string | null;    // имя оператора
+  actualStartTime: string | null; // фактическое время заступления (HH:MM)
+  actualHours: number | null;    // фактически отработано часов (null = смена не завершена)
 }
 
 export interface FineReason {

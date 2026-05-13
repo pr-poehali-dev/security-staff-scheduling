@@ -377,45 +377,311 @@ function Objects() {
   );
 }
 
+// ─── Confirm Post Modal ───────────────────────────────────────────────────────
+function ConfirmPostModal({ post, operatorName, onConfirm, onClose }: {
+  post: Post;
+  operatorName: string;
+  onConfirm: (actualStartTime: string, confirmedBy: string) => void;
+  onClose: () => void;
+}) {
+  const now = new Date();
+  const defaultTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const [startTime, setStartTime] = useState(defaultTime);
+  const [operator, setOperator] = useState(operatorName);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-card border border-emerald-500/30 rounded-2xl p-6 w-full max-w-sm section-enter" onClick={e => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-4">
+          <Icon name="ClipboardCheck" size={22} className="text-emerald-400" />
+        </div>
+        <h3 className="font-bold text-lg text-foreground mb-1">Подтверждение заступления</h3>
+        <p className="text-sm text-muted-foreground mb-5">
+          Пост: <span className="text-foreground font-medium">{post.name}</span> · {post.time}
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5 block">Фактическое время заступления</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5 block">Оператор (подтверждающий)</label>
+            <input
+              value={operator}
+              onChange={e => setOperator(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={() => { onConfirm(startTime, operator); onClose(); }}
+            className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 transition-colors"
+          >
+            Подтвердить заступление
+          </button>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-secondary">Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Close Post Modal ─────────────────────────────────────────────────────────
+function ClosePostModal({ post, onClose: onModalClose, onConfirm }: {
+  post: Post;
+  onClose: () => void;
+  onConfirm: (hours: number) => void;
+}) {
+  // Calculate expected hours from scheduled time
+  const expectedHours = parseShiftHours(post.time);
+  const [hours, setHours] = useState(expectedHours > 0 ? expectedHours : 12);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onModalClose}>
+      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-sm section-enter" onClick={e => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+          <Icon name="Timer" size={22} className="text-primary" />
+        </div>
+        <h3 className="font-bold text-lg text-foreground mb-1">Закрытие смены</h3>
+        <p className="text-sm text-muted-foreground mb-5">
+          Пост: <span className="text-foreground font-medium">{post.name}</span>
+          {post.actualStartTime && <> · Заступил: <span className="font-mono">{post.actualStartTime}</span></>}
+        </p>
+        <div>
+          <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1.5 block">Фактически отработано часов</label>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setHours(h => Math.max(0.5, h - 0.5))} className="w-9 h-9 rounded-xl bg-muted hover:bg-secondary flex items-center justify-center text-foreground">
+              <Icon name="Minus" size={14} />
+            </button>
+            <input
+              type="number" min={0.5} max={24} step={0.5}
+              value={hours}
+              onChange={e => setHours(parseFloat(e.target.value) || 0)}
+              className="flex-1 bg-muted border border-border rounded-xl px-4 py-2.5 text-sm text-center font-mono font-bold text-foreground focus:outline-none focus:border-primary/50"
+            />
+            <button onClick={() => setHours(h => Math.min(24, h + 0.5))} className="w-9 h-9 rounded-xl bg-muted hover:bg-secondary flex items-center justify-center text-foreground">
+              <Icon name="Plus" size={14} />
+            </button>
+          </div>
+          {expectedHours > 0 && (
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              По графику: <span className="font-mono">{expectedHours} ч</span>
+              {hours < expectedHours && <span className="text-amber-400 ml-2">↓ {(expectedHours - hours).toFixed(1)} ч недоработка</span>}
+              {hours > expectedHours && <span className="text-emerald-400 ml-2">↑ {(hours - expectedHours).toFixed(1)} ч сверхурочно</span>}
+            </p>
+          )}
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={() => { onConfirm(hours); onModalClose(); }}
+            className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
+          >
+            Закрыть смену
+          </button>
+          <button onClick={onModalClose} className="px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-secondary">Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Placements() {
-  const { locations, posts, employees, assignPost, can } = useApp();
+  const { locations, posts, employees, assignPost, confirmPost, closePost, can, session } = useApp();
   const canEdit = can("placements:edit");
   const [assignPost2, setAssignPost2] = useState<Post | null>(null);
+  const [confirmingPost, setConfirmingPost] = useState<Post | null>(null);
+  const [closingPost, setClosingPost] = useState<Post | null>(null);
   const [fineSettings, setFineSettings] = useState(false);
-  if (locations.length === 0) return <div className="section-enter text-center py-20"><Icon name="MapPin" size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" /><p className="text-muted-foreground">Добавьте объекты в разделе «Объекты»</p></div>;
+
+  const operatorName = session?.user.name ?? "Оператор";
+
+  // Summary stats
+  const confirmed = posts.filter(p => p.confirmedAt !== null).length;
+  const covered = posts.filter(p => p.status === "covered").length;
+  const pending = covered - confirmed;
+
+  if (locations.length === 0) return (
+    <div className="section-enter text-center py-20">
+      <Icon name="MapPin" size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
+      <p className="text-muted-foreground">Добавьте объекты в разделе «Объекты»</p>
+    </div>
+  );
+
   return (
     <div className="section-enter space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div><h2 className="text-2xl font-bold text-foreground">Расстановки</h2><p className="text-muted-foreground text-sm mt-1">Назначение охранников на посты</p></div>
-        {canEdit && <button onClick={() => setFineSettings(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-secondary transition-colors"><Icon name="Settings2" size={15} /> Причины штрафов</button>}
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Расстановки</h2>
+          <p className="text-muted-foreground text-sm mt-1">Назначение и подтверждение заступления на посты</p>
+        </div>
+        {canEdit && (
+          <button onClick={() => setFineSettings(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-secondary transition-colors">
+            <Icon name="Settings2" size={15} /> Причины штрафов
+          </button>
+        )}
       </div>
+
+      {/* Confirmation summary */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Постов назначено", val: covered, icon: "UserCheck", c: "text-primary", bg: "bg-primary/10" },
+          { label: "Подтверждено", val: confirmed, icon: "ClipboardCheck", c: "text-emerald-400", bg: "bg-emerald-500/10" },
+          { label: "Ожидают подтверждения", val: pending, icon: "Clock", c: pending > 0 ? "text-amber-400" : "text-muted-foreground", bg: pending > 0 ? "bg-amber-500/10" : "bg-muted/40" },
+        ].map(s => (
+          <div key={s.label} className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+              <Icon name={s.icon} size={18} className={s.c} />
+            </div>
+            <div>
+              <div className={`text-xl font-bold font-mono ${s.c}`}>{s.val}</div>
+              <div className="text-xs text-muted-foreground">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Location groups */}
       {locations.map(loc => {
         const lp = posts.filter(p => p.locationId === loc.id);
+        const locConfirmed = lp.filter(p => p.confirmedAt !== null).length;
         return (
           <div key={loc.id} className="bg-card border border-border rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
               <Icon name="Building2" size={16} className="text-primary" />
               <h3 className="font-semibold text-foreground">{loc.name}</h3>
-              <span className="ml-auto text-xs text-muted-foreground font-mono">{lp.filter(p => p.status === "covered").length}/{lp.length} закрыто</span>
+              <span className="text-xs text-muted-foreground font-mono ml-1">
+                {lp.filter(p => p.status === "covered").length}/{lp.length} закрыто
+              </span>
+              <span className="ml-auto text-xs px-2 py-0.5 rounded-full border font-mono
+                 border-emerald-500/20 bg-emerald-500/5 text-emerald-400">
+                {locConfirmed}/{lp.filter(p => p.status === "covered").length} подтверждено
+              </span>
             </div>
-            {lp.length === 0 ? <p className="text-xs text-muted-foreground py-3 text-center">Посты не назначены</p> : (
+
+            {lp.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-3 text-center">Посты не назначены</p>
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {lp.map(post => {
                   const emp = employees.find(e => e.id === post.officerId);
+                  const isConfirmed = post.confirmedAt !== null;
+                  const isClosed = post.actualHours !== null;
+
                   return (
-                    <div key={post.id} className={`p-4 rounded-xl border ${post.status === "covered" ? "border-emerald-500/20 bg-emerald-500/5" : post.status === "alert" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
-                      <div className="flex items-start justify-between mb-2"><span className="font-medium text-sm text-foreground">{post.name}</span>{postBadge(post.status)}</div>
+                    <div
+                      key={post.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        isClosed         ? "border-blue-500/20 bg-blue-500/5" :
+                        isConfirmed      ? "border-emerald-500/30 bg-emerald-500/8" :
+                        post.status === "covered" ? "border-emerald-500/20 bg-emerald-500/5" :
+                        post.status === "alert"   ? "border-red-500/30 bg-red-500/5" :
+                                                    "border-amber-500/20 bg-amber-500/5"
+                      }`}
+                    >
+                      {/* Post header */}
+                      <div className="flex items-start justify-between mb-1.5">
+                        <span className="font-medium text-sm text-foreground">{post.name}</span>
+                        {isClosed
+                          ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20 font-medium">Закрыта</span>
+                          : isConfirmed
+                          ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                              <Icon name="CheckCircle2" size={9} />Подтверждён
+                            </span>
+                          : postBadge(post.status)
+                        }
+                      </div>
+
+                      {/* Schedule time */}
                       <p className="text-xs text-muted-foreground font-mono mb-2">{post.time}</p>
+
+                      {/* Employee row */}
                       {emp ? (
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">{emp.name.split(" ").map(n => n[0]).join("").slice(0, 2)}</div>
+                        <div className="flex items-center gap-2 mb-2.5">
+                          <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                            {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
                           <span className="text-xs text-foreground truncate">{emp.name}</span>
                         </div>
-                      ) : <p className="text-xs text-amber-400 flex items-center gap-1 mb-3"><Icon name="UserX" size={11} /> Не назначен</p>}
+                      ) : (
+                        <p className="text-xs text-amber-400 flex items-center gap-1 mb-2.5">
+                          <Icon name="UserX" size={11} /> Не назначен
+                        </p>
+                      )}
+
+                      {/* Confirmation details */}
+                      {isConfirmed && (
+                        <div className="mb-2.5 space-y-0.5">
+                          <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <Icon name="Clock" size={9} />
+                            Заступил: <span className="font-mono font-semibold">{post.actualStartTime}</span>
+                          </p>
+                          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Icon name="User" size={9} />
+                            Оператор: {post.confirmedBy}
+                          </p>
+                          {isClosed && (
+                            <p className="text-[10px] text-blue-400 flex items-center gap-1">
+                              <Icon name="Timer" size={9} />
+                              Отработано: <span className="font-mono font-semibold">{post.actualHours} ч</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
                       {canEdit && (
-                        <button onClick={() => setAssignPost2(post)} className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-background/60 border border-border/60 hover:border-primary/40 hover:bg-primary/5 text-xs text-muted-foreground hover:text-foreground transition-all">
-                          <Icon name="UserCog" size={12} />{emp ? "Заменить" : "Назначить"}
-                        </button>
+                        <div className="flex gap-1.5 mt-1">
+                          {/* Assign/Replace */}
+                          {!isConfirmed && (
+                            <button
+                              onClick={() => setAssignPost2(post)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-background/60 border border-border/60 hover:border-primary/40 hover:bg-primary/5 text-xs text-muted-foreground hover:text-foreground transition-all"
+                            >
+                              <Icon name="UserCog" size={11} />
+                              {emp ? "Заменить" : "Назначить"}
+                            </button>
+                          )}
+
+                          {/* Confirm button — only if assigned and not confirmed */}
+                          {emp && !isConfirmed && (
+                            <button
+                              onClick={() => setConfirmingPost(post)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-xs text-emerald-400 font-medium transition-all"
+                            >
+                              <Icon name="ClipboardCheck" size={11} />
+                              Подтвердить
+                            </button>
+                          )}
+
+                          {/* Close shift — only if confirmed and not closed */}
+                          {isConfirmed && !isClosed && (
+                            <button
+                              onClick={() => setClosingPost(post)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-primary/10 border border-primary/30 hover:bg-primary/20 text-xs text-primary font-medium transition-all"
+                            >
+                              <Icon name="Timer" size={11} />
+                              Закрыть смену
+                            </button>
+                          )}
+
+                          {/* Re-assign after close */}
+                          {isClosed && (
+                            <button
+                              onClick={() => setAssignPost2(post)}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-background/60 border border-border/60 hover:border-primary/40 text-xs text-muted-foreground hover:text-foreground transition-all"
+                            >
+                              <Icon name="RefreshCw" size={11} />
+                              Новая смена
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -425,7 +691,26 @@ function Placements() {
           </div>
         );
       })}
-      {assignPost2 && <AssignModal post={assignPost2} onAssign={assignPost} onClose={() => setAssignPost2(null)} />}
+
+      {/* Modals */}
+      {assignPost2 && (
+        <AssignModal post={assignPost2} onAssign={assignPost} onClose={() => setAssignPost2(null)} />
+      )}
+      {confirmingPost && (
+        <ConfirmPostModal
+          post={confirmingPost}
+          operatorName={operatorName}
+          onConfirm={(t, by) => confirmPost(confirmingPost.id, t, by)}
+          onClose={() => setConfirmingPost(null)}
+        />
+      )}
+      {closingPost && (
+        <ClosePostModal
+          post={closingPost}
+          onConfirm={h => closePost(closingPost.id, h)}
+          onClose={() => setClosingPost(null)}
+        />
+      )}
       {fineSettings && <FineReasonsModal onClose={() => setFineSettings(false)} />}
     </div>
   );
@@ -580,10 +865,27 @@ function EmployeeSalaryCard({ employee, locations, onEdit, onClose }: {
   onEdit: () => void;
   onClose: () => void;
 }) {
+  const { posts, fines } = useApp();
+
   const loc = locations.find(l => employee.location.startsWith(l.name));
   const baseRate = loc?.hourlyRate ?? 0;
   const totalRate = baseRate + employee.seniorityBonus;
   const shiftHours = parseShiftHours(employee.shift);
+
+  // ── Фактические данные из расстановок ────────────────────────────────────
+  // Все посты этого сотрудника с подтверждёнными и закрытыми сменами
+  const empPosts = posts.filter(p => p.officerId === employee.id);
+  const closedPosts = empPosts.filter(p => p.actualHours !== null);
+  const confirmedPosts = empPosts.filter(p => p.confirmedAt !== null && p.actualHours === null);
+  const totalActualHours = closedPosts.reduce((s, p) => s + (p.actualHours ?? 0), 0);
+  const actualEarned = totalActualHours * totalRate;
+
+  // Штрафы сотрудника
+  const empFines = fines.filter(f => f.employeeId === employee.id);
+  const totalFinesAmt = empFines.reduce((s, f) => s + f.amount, 0);
+  const netActual = Math.max(0, actualEarned - totalFinesAmt);
+
+  const hasActualData = closedPosts.length > 0 || confirmedPosts.length > 0;
 
   // Configurable in card
   const [shiftsPerMonth, setShiftsPerMonth] = useState(15);
@@ -672,12 +974,82 @@ function EmployeeSalaryCard({ employee, locations, onEdit, onClose }: {
             </div>
           </div>
 
+          {/* ── Фактические данные из расстановок ── */}
+          {hasActualData && (
+            <div className="bg-card border border-emerald-500/20 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
+                <Icon name="ClipboardCheck" size={14} className="text-emerald-400" />
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Факт из расстановок</p>
+              </div>
+              <div className="p-4 space-y-2">
+                {/* Closed shifts */}
+                {closedPosts.map(p => {
+                  const pLoc = locations.find(l => l.id === p.locationId);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between text-sm bg-muted/30 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="font-medium text-foreground">{p.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{pLoc?.name} · {p.actualStartTime ?? p.time}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono font-semibold text-blue-400">{p.actualHours} ч</p>
+                        <p className="text-[10px] text-muted-foreground">{fmtRub((p.actualHours ?? 0) * totalRate)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Confirmed but open shifts */}
+                {confirmedPosts.map(p => {
+                  const pLoc = locations.find(l => l.id === p.locationId);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between text-sm bg-emerald-500/5 rounded-lg px-3 py-2 border border-emerald-500/15">
+                      <div>
+                        <p className="font-medium text-foreground">{p.name}</p>
+                        <p className="text-[10px] text-emerald-400">{pLoc?.name} · Заступил: {p.actualStartTime}</p>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 border border-emerald-500/30 rounded px-1.5 py-0.5">Смена идёт</span>
+                    </div>
+                  );
+                })}
+
+                {/* Totals row */}
+                {closedPosts.length > 0 && (
+                  <div className="pt-2 border-t border-border space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Отработано часов</span>
+                      <span className="font-mono font-semibold text-foreground">{totalActualHours} ч</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Начислено</span>
+                      <span className="font-mono text-foreground">{fmtRub(actualEarned)}</span>
+                    </div>
+                    {totalFinesAmt > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Icon name="BadgeAlert" size={12} className="text-red-400" />
+                          Штрафы ({empFines.length} шт.)
+                        </span>
+                        <span className="font-mono text-red-400">−{fmtRub(totalFinesAmt)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-1.5 border-t border-border">
+                      <span className="text-sm font-semibold text-foreground">К выплате</span>
+                      <span className={`text-base font-mono font-bold ${netActual > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {fmtRub(netActual)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Salary calculator ── */}
           {totalRate > 0 && shiftHours > 0 && (
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
                 <Icon name="Calculator" size={14} className="text-primary" />
-                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Расчёт зарплаты</p>
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Плановый расчёт</p>
               </div>
 
               <div className="p-4 space-y-4">
@@ -763,7 +1135,7 @@ function EmployeeSalaryCard({ employee, locations, onEdit, onClose }: {
 
 // ─── Employees Section ────────────────────────────────────────────────────────
 function Employees() {
-  const { employees, addEmployee, editEmployee, deleteEmployee, locations, can } = useApp();
+  const { employees, addEmployee, editEmployee, deleteEmployee, locations, posts, fines, can } = useApp();
   const canEdit = can("employees:edit");
 
   const [filter, setFilter] = useState<"all" | "active" | "off" | "sick">("all");
@@ -830,67 +1202,97 @@ function Employees() {
       {/* ── ФОТ summary ── */}
       {employees.length > 0 && (() => {
         const SHIFTS = 15;
-        const all = employees.map(e => {
-          const r = getEffectiveRate(e);
-          const hrs = parseShiftHours(e.shift);
-          return { rate: r, hrs, perMonth: r.total * hrs * SHIFTS };
-        });
-        const fotTotal = all.reduce((s, x) => s + x.perMonth, 0);
-        const fotActive = employees.filter(e => e.status === "active").map(e => {
-          const r = getEffectiveRate(e);
-          const hrs = parseShiftHours(e.shift);
-          return r.total * hrs * SHIFTS;
-        }).reduce((s, v) => s + v, 0);
-        const avgRate = all.filter(x => x.rate.total > 0);
-        const avgRateVal = avgRate.length > 0 ? Math.round(avgRate.reduce((s, x) => s + x.rate.total, 0) / avgRate.length) : 0;
-        const maxBonus = Math.max(...employees.map(e => e.seniorityBonus), 0);
         const fmtR = (n: number) => n.toLocaleString("ru-RU") + " ₽";
 
+        // Плановый ФОТ
+        const planAll = employees.map(e => {
+          const r = getEffectiveRate(e);
+          return r.total * parseShiftHours(e.shift) * SHIFTS;
+        });
+        const fotPlan = planAll.reduce((s, v) => s + v, 0);
+
+        // Фактический ФОТ из закрытых смен
+        const closedPosts = posts.filter(p => p.actualHours !== null && p.officerId !== null);
+        const fotActual = closedPosts.reduce((s, p) => {
+          const emp = employees.find(e => e.id === p.officerId);
+          if (!emp) return s;
+          const rate = getEffectiveRate(emp).total;
+          return s + (p.actualHours ?? 0) * rate;
+        }, 0);
+        const actualHoursTotal = closedPosts.reduce((s, p) => s + (p.actualHours ?? 0), 0);
+
+        // Штрафы
+        const totalFinesDeduction = fines.reduce((s, f) => s + f.amount, 0);
+        const fotNet = Math.max(0, fotActual - totalFinesDeduction);
+
+        // Среднее
+        const avgRate = employees.filter(e => getEffectiveRate(e).total > 0);
+        const avgRateVal = avgRate.length > 0
+          ? Math.round(avgRate.reduce((s, e) => s + getEffectiveRate(e).total, 0) / avgRate.length)
+          : 0;
+
+        const hasActual = fotActual > 0;
+
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              {
-                label: "ФОТ в месяц (все)",
-                val: fmtR(fotTotal),
-                sub: `${employees.length} чел. × 15 смен`,
-                icon: "Banknote",
-                c: "text-primary",
-                bg: "bg-primary/10",
-              },
-              {
-                label: "ФОТ на смене сейчас",
-                val: fmtR(fotActive),
-                sub: `${employees.filter(e => e.status === "active").length} активных`,
-                icon: "UserCheck",
-                c: "text-emerald-400",
-                bg: "bg-emerald-500/10",
-              },
-              {
-                label: "Средняя ставка",
-                val: avgRateVal > 0 ? `${avgRateVal} ₽/ч` : "—",
-                sub: "тариф + надбавка",
-                icon: "TrendingUp",
-                c: "text-amber-400",
-                bg: "bg-amber-500/10",
-              },
-              {
-                label: "Макс. надбавка",
-                val: maxBonus > 0 ? `+${maxBonus} ₽/ч` : "—",
-                sub: "за выслугу лет",
-                icon: "Award",
-                c: "text-cyan-400",
-                bg: "bg-cyan-500/10",
-              },
-            ].map(s => (
-              <div key={s.label} className="bg-card border border-border rounded-xl p-4">
-                <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center mb-2.5`}>
-                  <Icon name={s.icon} size={18} className={s.c} />
+          <div className="space-y-3">
+            {/* Плановые */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "ФОТ план/мес", val: fmtR(fotPlan), sub: `${employees.length} чел. × ${SHIFTS} смен`, icon: "Banknote", c: "text-primary", bg: "bg-primary/10" },
+                { label: "Средняя ставка", val: avgRateVal > 0 ? `${avgRateVal} ₽/ч` : "—", sub: "тариф + надбавка", icon: "TrendingUp", c: "text-amber-400", bg: "bg-amber-500/10" },
+                { label: "Фактически начислено", val: hasActual ? fmtR(fotActual) : "—", sub: hasActual ? `${actualHoursTotal} ч из расстановок` : "Нет закрытых смен", icon: "ClipboardCheck", c: hasActual ? "text-blue-400" : "text-muted-foreground", bg: hasActual ? "bg-blue-500/10" : "bg-muted/40" },
+                { label: "К выплате (факт − штрафы)", val: hasActual ? fmtR(fotNet) : "—", sub: hasActual ? (totalFinesDeduction > 0 ? `−${fmtR(totalFinesDeduction)} штрафы` : "Штрафов нет") : "Нет данных", icon: "Wallet", c: hasActual ? "text-emerald-400" : "text-muted-foreground", bg: hasActual ? "bg-emerald-500/10" : "bg-muted/40" },
+              ].map(s => (
+                <div key={s.label} className="bg-card border border-border rounded-xl p-4">
+                  <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center mb-2.5`}>
+                    <Icon name={s.icon} size={18} className={s.c} />
+                  </div>
+                  <div className={`text-lg font-bold font-mono ${s.c} leading-tight`}>{s.val}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">{s.sub}</div>
                 </div>
-                <div className={`text-lg font-bold font-mono ${s.c} leading-tight`}>{s.val}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
-                <div className="text-[10px] text-muted-foreground/60 mt-0.5">{s.sub}</div>
+              ))}
+            </div>
+
+            {/* Расшифровка фактического ФОТ по сотрудникам */}
+            {hasActual && (
+              <div className="bg-card border border-emerald-500/20 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5">
+                  <Icon name="ClipboardList" size={14} className="text-emerald-400" />
+                  <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Фактический ФОТ по сотрудникам</p>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">из подтверждённых расстановок</span>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {employees
+                    .map(emp => {
+                      const empPosts = closedPosts.filter(p => p.officerId === emp.id);
+                      if (empPosts.length === 0) return null;
+                      const rate = getEffectiveRate(emp).total;
+                      const hours = empPosts.reduce((s, p) => s + (p.actualHours ?? 0), 0);
+                      const earned = hours * rate;
+                      const empFinesTotal = fines.filter(f => f.employeeId === emp.id).reduce((s, f) => s + f.amount, 0);
+                      const net = Math.max(0, earned - empFinesTotal);
+                      return (
+                        <div key={emp.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
+                          <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                            {emp.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">{emp.name}</p>
+                            <p className="text-xs text-muted-foreground">{hours} ч × {rate} ₽/ч{empFinesTotal > 0 ? ` − ${fmtR(empFinesTotal)} штрафы` : ""}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {empFinesTotal > 0 && <p className="text-xs font-mono text-muted-foreground line-through">{fmtR(earned)}</p>}
+                            <p className="text-sm font-mono font-bold text-emerald-400">{fmtR(net)}</p>
+                          </div>
+                        </div>
+                      );
+                    })
+                    .filter(Boolean)
+                  }
+                </div>
               </div>
-            ))}
+            )}
           </div>
         );
       })()}
@@ -986,36 +1388,43 @@ function Employees() {
               {/* ── Footer: totals ── */}
               {(() => {
                 const SHIFTS_DEFAULT = 15;
+                const fmtR = (n: number) => n.toLocaleString("ru-RU") + " ₽";
+                if (filtered.length === 0) return null;
                 const totals = filtered.reduce((acc, e) => {
                   const r = getEffectiveRate(e);
                   const hrs = parseShiftHours(e.shift);
-                  const perMonth = r.total * hrs * SHIFTS_DEFAULT;
+                  // фактические часы из закрытых постов
+                  const empClosed = posts.filter(p => p.officerId === e.id && p.actualHours !== null);
+                  const actualH = empClosed.reduce((s, p) => s + (p.actualHours ?? 0), 0);
+                  const actualEarned = actualH * r.total;
+                  const empFinesAmt = fines.filter(f => f.employeeId === e.id).reduce((s, f) => s + f.amount, 0);
                   return {
                     base: acc.base + r.base,
                     bonus: acc.bonus + r.bonus,
-                    total: acc.total + r.total,
-                    fot: acc.fot + perMonth,
+                    planFot: acc.planFot + r.total * hrs * SHIFTS_DEFAULT,
+                    actualHours: acc.actualHours + actualH,
+                    actualNet: acc.actualNet + Math.max(0, actualEarned - empFinesAmt),
                   };
-                }, { base: 0, bonus: 0, total: 0, fot: 0 });
-                const fmtR = (n: number) => n.toLocaleString("ru-RU") + " ₽";
-                if (filtered.length === 0) return null;
+                }, { base: 0, bonus: 0, planFot: 0, actualHours: 0, actualNet: 0 });
+                const hasActual = totals.actualHours > 0;
                 return (
                   <tfoot>
                     <tr className="border-t-2 border-border bg-muted/40">
                       <td className="px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Итого: {filtered.length} чел.
+                        {filtered.length} чел.
                       </td>
                       <td className="px-4 py-3" />
                       <td className="px-4 py-3" />
                       <td className="px-4 py-3" />
-                      <td className="px-4 py-3 text-sm font-mono text-foreground">
+                      <td className="px-4 py-3 text-xs font-mono text-muted-foreground">
                         {totals.base > 0 ? `∅ ${Math.round(totals.base / filtered.length)} ₽/ч` : "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono text-amber-400">
-                        {totals.bonus > 0 ? `∅ +${Math.round(totals.bonus / filtered.length)} ₽/ч` : "—"}
+                      <td className="px-4 py-3 text-xs font-mono text-amber-400">
+                        {totals.bonus > 0 ? `+∅${Math.round(totals.bonus / filtered.length)}` : "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono font-bold text-emerald-400">
-                        ФОТ/мес: {fmtR(totals.fot)}
+                      <td className="px-4 py-3">
+                        <div className="text-xs font-mono text-muted-foreground">план: {fmtR(totals.planFot)}</div>
+                        {hasActual && <div className="text-xs font-mono font-bold text-emerald-400 mt-0.5">факт: {fmtR(totals.actualNet)}</div>}
                       </td>
                       <td className="px-4 py-3" />
                     </tr>

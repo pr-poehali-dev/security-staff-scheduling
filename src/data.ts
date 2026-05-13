@@ -144,21 +144,21 @@ export const INIT_EMPLOYEES: Employee[] = [
 
 export const INIT_POSTS: Post[] = [
   // Org 1
-  { id: 1, orgId: 1, name: "Главный вход",    locationId: 1, officerId: 1, time: "08:00 – 20:00", status: "covered" },
-  { id: 2, orgId: 1, name: "Периметр (сев.)", locationId: 1, officerId: 2, time: "08:00 – 20:00", status: "covered" },
-  { id: 3, orgId: 1, name: "Периметр (юж.)",  locationId: 1, officerId: null, time: "08:00 – 20:00", status: "vacant"  },
-  { id: 4, orgId: 1, name: "КПП",             locationId: 2, officerId: 3, time: "20:00 – 08:00", status: "covered" },
-  { id: 5, orgId: 1, name: "Склад",           locationId: 2, officerId: 7, time: "08:00 – 20:00", status: "covered" },
-  { id: 6, orgId: 1, name: "Ворота въезда",   locationId: 2, officerId: null, time: "08:00 – 20:00", status: "alert"   },
-  { id: 7, orgId: 1, name: "Парковка",        locationId: 3, officerId: 5, time: "08:00 – 20:00", status: "covered" },
-  { id: 8, orgId: 1, name: "Главный вход",    locationId: 3, officerId: 8, time: "20:00 – 08:00", status: "covered" },
+  { id: 1, orgId: 1, name: "Главный вход",    locationId: 1, officerId: 1, time: "08:00 – 20:00", status: "covered", confirmedAt: "2026-05-13T08:05:00", confirmedBy: "Дмитрий Савин", actualStartTime: "08:05", actualHours: 12 },
+  { id: 2, orgId: 1, name: "Периметр (сев.)", locationId: 1, officerId: 2, time: "08:00 – 20:00", status: "covered", confirmedAt: "2026-05-13T08:22:00", confirmedBy: "Дмитрий Савин", actualStartTime: "08:22", actualHours: null },
+  { id: 3, orgId: 1, name: "Периметр (юж.)",  locationId: 1, officerId: null, time: "08:00 – 20:00", status: "vacant",  confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
+  { id: 4, orgId: 1, name: "КПП",             locationId: 2, officerId: 3, time: "20:00 – 08:00", status: "covered", confirmedAt: "2026-05-12T20:03:00", confirmedBy: "Дмитрий Савин", actualStartTime: "20:03", actualHours: 12 },
+  { id: 5, orgId: 1, name: "Склад",           locationId: 2, officerId: 7, time: "08:00 – 20:00", status: "covered", confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
+  { id: 6, orgId: 1, name: "Ворота въезда",   locationId: 2, officerId: null, time: "08:00 – 20:00", status: "alert",   confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
+  { id: 7, orgId: 1, name: "Парковка",        locationId: 3, officerId: 5, time: "08:00 – 20:00", status: "covered", confirmedAt: "2026-05-13T08:01:00", confirmedBy: "Дмитрий Савин", actualStartTime: "08:01", actualHours: null },
+  { id: 8, orgId: 1, name: "Главный вход",    locationId: 3, officerId: 8, time: "20:00 – 08:00", status: "covered", confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
   // Org 2
-  { id: 9,  orgId: 2, name: "Главный вход",   locationId: 4, officerId: 9,  time: "08:00 – 20:00", status: "covered" },
-  { id: 10, orgId: 2, name: "КПП",            locationId: 5, officerId: 10, time: "08:00 – 20:00", status: "covered" },
-  { id: 11, orgId: 2, name: "Периметр",       locationId: 5, officerId: null, time: "20:00 – 08:00", status: "vacant" },
+  { id: 9,  orgId: 2, name: "Главный вход",   locationId: 4, officerId: 9,  time: "08:00 – 20:00", status: "covered", confirmedAt: "2026-05-13T08:10:00", confirmedBy: "Ольга Карпова", actualStartTime: "08:10", actualHours: null },
+  { id: 10, orgId: 2, name: "КПП",            locationId: 5, officerId: 10, time: "08:00 – 20:00", status: "covered", confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
+  { id: 11, orgId: 2, name: "Периметр",       locationId: 5, officerId: null, time: "20:00 – 08:00", status: "vacant",  confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
   // Org 3
-  { id: 12, orgId: 3, name: "Главный вход",   locationId: 6, officerId: 11, time: "08:00 – 20:00", status: "covered" },
-  { id: 13, orgId: 3, name: "Парковка",       locationId: 6, officerId: null, time: "08:00 – 20:00", status: "vacant" },
+  { id: 12, orgId: 3, name: "Главный вход",   locationId: 6, officerId: 11, time: "08:00 – 20:00", status: "covered", confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
+  { id: 13, orgId: 3, name: "Парковка",       locationId: 6, officerId: null, time: "08:00 – 20:00", status: "vacant",  confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null },
 ];
 
 export const INIT_FINE_REASONS: FineReason[] = [

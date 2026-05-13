@@ -52,6 +52,8 @@ interface AppContextValue {
 
   posts: Post[];
   assignPost: (postId: number, officerId: number | null, fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null) => void;
+  confirmPost: (postId: number, actualStartTime: string, confirmedBy: string) => void;
+  closePost: (postId: number, actualHours: number) => void;
 
   fineReasons: FineReason[];
   setFineReasons: (reasons: FineReason[]) => void;
@@ -179,12 +181,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAllPosts(prev => prev.map(p => {
       if (p.id !== postId) return p;
       const status: Post["status"] = officerId !== null ? "covered" : "vacant";
-      return { ...p, officerId, status };
+      // сброс подтверждения при переназначении
+      return { ...p, officerId, status, confirmedAt: null, confirmedBy: null, actualStartTime: null, actualHours: null };
     }));
     if (fine) {
       const today = new Date().toISOString().slice(0, 10);
       setAllFines(prev => [...prev, { id: maxId(prev) + 1, orgId: currentOrgId, date: today, postId, ...fine }]);
     }
+  };
+
+  // Оператор подтверждает фактическое заступление
+  const confirmPost = (postId: number, actualStartTime: string, confirmedBy: string) => {
+    setAllPosts(prev => prev.map(p =>
+      p.id !== postId ? p : {
+        ...p,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy,
+        actualStartTime,
+        actualHours: null, // смена ещё не закрыта
+      }
+    ));
+  };
+
+  // Оператор закрывает смену — фиксирует фактически отработанные часы
+  const closePost = (postId: number, actualHours: number) => {
+    setAllPosts(prev => prev.map(p =>
+      p.id !== postId ? p : { ...p, actualHours }
+    ));
   };
 
   const setFineReasons = (reasons: FineReason[]) =>
@@ -197,7 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     users, addUser, editUser, deleteUser,
     locations, addLocation, editLocation, deleteLocation,
     employees, addEmployee, editEmployee, deleteEmployee,
-    posts, assignPost,
+    posts, assignPost, confirmPost, closePost,
     fineReasons, setFineReasons,
     fines,
     allLocations, allEmployees, allPosts, allFines,
