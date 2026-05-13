@@ -10,6 +10,8 @@ import type { Section, Location, Post, FineRecord, FineReason } from "@/types";
 import {
   exportFinesPDF, exportFinesExcel, type FinesReportData,
   exportPDF, exportExcel, type ExportReportData,
+  exportEmployeeReportExcel, type EmployeeReportData,
+  exportLocationReportExcel, type LocationReportData,
 } from "@/lib/export";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -2371,14 +2373,166 @@ function useReportBuilders() {
     };
   };
 
-  return { buildFinesData, buildConsolidatedData, buildShiftsData, today };
+  // ── Employee Report ───────────────────────────────────────────────────────
+  const buildEmployeeReport = (
+    empFilter: number | "all",
+    dateFrom: string,
+    dateTo: string,
+  ): EmployeeReportData => {
+    const fromDate = new Date(dateFrom);
+    const toDate = new Date(dateTo);
+    toDate.setHours(23, 59, 59, 999);
+
+    const targetEmps = empFilter === "all" ? employees : employees.filter(e => e.id === empFilter);
+    const filterLabel = empFilter === "all" ? "Все сотрудники" : (employees.find(e => e.id === empFilter)?.name ?? "—");
+
+    // Фильтруем закрытые посты в периоде (по closedAt или actualHours)
+    const closedPosts = posts.filter(p => {
+      if (p.actualHours === null || p.officerId === null) return false;
+      const closeDate = p.closedAt ? new Date(p.closedAt) : (p.confirmedAt ? new Date(p.confirmedAt) : null);
+      if (!closeDate) return false;
+      return closeDate >= fromDate && closeDate <= toDate;
+    });
+
+    const rows = targetEmps.map(emp => {
+      const empPosts = closedPosts.filter(p => p.officerId === emp.id);
+      const loc = locations.find(l => emp.location.startsWith(l.name));
+      const base = loc?.hourlyRate ?? 0;
+      const bonus = emp.seniorityBonus;
+      const totalRate = base + bonus;
+      const empFines = fines.filter(f => f.employeeId === emp.id && f.date >= dateFrom && f.date <= dateTo);
+
+      const days: import("@/lib/export").EmployeeReportDayRow[] = empPosts.map(p => {
+        const postLoc = locations.find(l => l.id === p.locationId);
+        const postBase = postLoc?.hourlyRate ?? base;
+        const rate = postBase + bonus;
+        const hours = p.actualHours ?? 0;
+        const earned = hours * rate;
+        // Штрафы за конкретный пост
+        const postFines = fines.filter(f => f.postId === p.id && f.employeeId === emp.id);
+        const finesAmt = postFines.reduce((s, f) => s + f.amount, 0);
+        const closeDate = p.closedAt ? new Date(p.closedAt) : (p.confirmedAt ? new Date(p.confirmedAt) : new Date());
+        return {
+          date: closeDate.toLocaleDateString("ru-RU"),
+          locationName: postLoc?.name ?? emp.location,
+          postName: p.name,
+          hoursWorked: hours,
+          baseRate: postBase,
+          bonus,
+          totalRate: rate,
+          earned,
+          finesAmount: finesAmt,
+          net: Math.max(0, earned - finesAmt),
+          isExtraShift: p.isExtraShift,
+        };
+      });
+
+      // Штрафы без привязки к посту (просто в периоде)
+      const otherFines = empFines.filter(f => !empPosts.find(p => p.id === f.postId));
+      const extraFinesAmt = otherFines.reduce((s, f) => s + f.amount, 0);
+
+      const totalHours = days.reduce((s, d) => s + d.hoursWorked, 0);
+      const totalEarned = days.reduce((s, d) => s + d.earned, 0);
+      const totalFines = days.reduce((s, d) => s + d.finesAmount, 0) + extraFinesAmt;
+      const totalNet = Math.max(0, totalEarned - totalFines);
+
+      return { employeeId: emp.id, employeeName: emp.name, rank: emp.rank, days, totalHours, totalEarned, totalFines, totalNet };
+    });
+
+    return {
+      orgName: currentOrg?.name ?? "—",
+      holdingName: holding.name,
+      generatedAt: today,
+      periodFrom: new Date(dateFrom).toLocaleDateString("ru-RU"),
+      periodTo: new Date(dateTo).toLocaleDateString("ru-RU"),
+      filterLabel,
+      rows,
+      grandTotalHours: rows.reduce((s, r) => s + r.totalHours, 0),
+      grandTotalEarned: rows.reduce((s, r) => s + r.totalEarned, 0),
+      grandTotalFines: rows.reduce((s, r) => s + r.totalFines, 0),
+      grandTotalNet: rows.reduce((s, r) => s + r.totalNet, 0),
+    };
+  };
+
+  // ── Location Report ───────────────────────────────────────────────────────
+  const buildLocationReport = (
+    locFilter: number | "all",
+    dateFrom: string,
+    dateTo: string,
+  ): LocationReportData => {
+    const fromDate = new Date(dateFrom);
+    const toDate = new Date(dateTo);
+    toDate.setHours(23, 59, 59, 999);
+
+    const targetLocs = locFilter === "all" ? locations : locations.filter(l => l.id === locFilter);
+    const filterLabel = locFilter === "all" ? "Все объекты" : (locations.find(l => l.id === locFilter)?.name ?? "—");
+
+    const closedPosts = posts.filter(p => {
+      if (p.actualHours === null || p.officerId === null) return false;
+      const closeDate = p.closedAt ? new Date(p.closedAt) : (p.confirmedAt ? new Date(p.confirmedAt) : null);
+      if (!closeDate) return false;
+      return closeDate >= fromDate && closeDate <= toDate;
+    });
+
+    const rows = targetLocs.map(loc => {
+      const locPosts = closedPosts.filter(p => p.locationId === loc.id);
+      const empRows: import("@/lib/export").LocationReportEmpRow[] = locPosts.map(p => {
+        const emp = employees.find(e => e.id === p.officerId);
+        const bonus = emp?.seniorityBonus ?? 0;
+        const rate = loc.hourlyRate + bonus;
+        const hours = p.actualHours ?? 0;
+        return {
+          employeeName: emp?.name ?? "—",
+          rank: emp?.rank ?? "—",
+          postName: p.name,
+          hoursWorked: hours,
+          rate,
+          earned: hours * rate,
+          isExtraShift: p.isExtraShift,
+        };
+      });
+      const totalHours = empRows.reduce((s, r) => s + r.hoursWorked, 0);
+      const totalEarned = empRows.reduce((s, r) => s + r.earned, 0);
+      return { locationName: loc.name, locationAddress: loc.address, employees: empRows, totalHours, totalEarned };
+    });
+
+    return {
+      orgName: currentOrg?.name ?? "—",
+      holdingName: holding.name,
+      generatedAt: today,
+      periodFrom: new Date(dateFrom).toLocaleDateString("ru-RU"),
+      periodTo: new Date(dateTo).toLocaleDateString("ru-RU"),
+      filterLabel,
+      rows,
+      grandTotalHours: rows.reduce((s, r) => s + r.totalHours, 0),
+      grandTotalEarned: rows.reduce((s, r) => s + r.totalEarned, 0),
+    };
+  };
+
+  return { buildFinesData, buildConsolidatedData, buildShiftsData, buildEmployeeReport, buildLocationReport, today };
 }
 
 function Reports() {
-  const { currentOrg, fines, employees, posts } = useApp();
-  const { buildFinesData, buildConsolidatedData, buildShiftsData } = useReportBuilders();
+  const { currentOrg, fines, employees, posts, locations } = useApp();
+  const { buildFinesData, buildConsolidatedData, buildShiftsData, buildEmployeeReport, buildLocationReport } = useReportBuilders();
 
   const [generating, setGenerating] = useState<string | null>(null);
+
+  // Дефолтный период — текущий месяц
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const defaultTo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  // Состояния для отчёта по сотрудникам
+  const [empDateFrom, setEmpDateFrom] = useState(defaultFrom);
+  const [empDateTo, setEmpDateTo] = useState(defaultTo);
+  const [empFilter, setEmpFilter] = useState<number | "all">("all");
+
+  // Состояния для отчёта по объектам
+  const [locDateFrom, setLocDateFrom] = useState(defaultFrom);
+  const [locDateTo, setLocDateTo] = useState(defaultTo);
+  const [locFilter, setLocFilter] = useState<number | "all">("all");
 
   const handle = async (id: string, fn: () => void) => {
     setGenerating(id);
@@ -2553,6 +2707,166 @@ function Reports() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* ── Детальные отчёты с периодом ── */}
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Детальные отчёты с выбором периода</h3>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+
+          {/* ── Отчёт по сотрудникам ── */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-border">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                  <Icon name="UserCheck" size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground text-sm">Отчёт по сотруднику</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Объекты, часы, начисления, надбавки и штрафы по дням</p>
+                </div>
+              </div>
+
+              {/* Период */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Период</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date" value={empDateFrom} onChange={e => setEmpDateFrom(e.target.value)}
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-blue-500/50"
+                    />
+                    <span className="text-muted-foreground text-xs">—</span>
+                    <input
+                      type="date" value={empDateTo} onChange={e => setEmpDateTo(e.target.value)}
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                </div>
+
+                {/* Сотрудник */}
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Сотрудник</label>
+                  <select
+                    value={empFilter === "all" ? "all" : String(empFilter)}
+                    onChange={e => setEmpFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-blue-500/50"
+                  >
+                    <option value="all">Все сотрудники</option>
+                    {employees.map(e => (
+                      <option key={e.id} value={e.id}>{e.name} — {e.rank}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Скачать как</p>
+              {(() => {
+                const isLoading = generating === "emp-xlsx";
+                return (
+                  <button
+                    onClick={() => handle("emp-xlsx", () => exportEmployeeReportExcel(buildEmployeeReport(empFilter, empDateFrom, empDateTo)))}
+                    disabled={!!generating}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                      {isLoading
+                        ? <Icon name="Loader2" size={15} className="animate-spin text-emerald-400" />
+                        : <Icon name="Table" size={15} className="text-emerald-400" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-emerald-400">{isLoading ? "Генерация..." : "Excel"}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {empFilter === "all" ? `${employees.length} листов + сводка` : "1 лист с детализацией по дням"}
+                      </p>
+                    </div>
+                    {!isLoading && <Icon name="Download" size={14} className="text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* ── Отчёт по объектам ── */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-border">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <Icon name="Building2" size={20} className="text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground text-sm">Отчёт по объекту</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Сотрудники, часы и начисления по каждому объекту</p>
+                </div>
+              </div>
+
+              {/* Период */}
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Период</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date" value={locDateFrom} onChange={e => setLocDateFrom(e.target.value)}
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-amber-500/50"
+                    />
+                    <span className="text-muted-foreground text-xs">—</span>
+                    <input
+                      type="date" value={locDateTo} onChange={e => setLocDateTo(e.target.value)}
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-amber-500/50"
+                    />
+                  </div>
+                </div>
+
+                {/* Объект */}
+                <div>
+                  <label className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-1">Объект</label>
+                  <select
+                    value={locFilter === "all" ? "all" : String(locFilter)}
+                    onChange={e => setLocFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
+                    className="w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-amber-500/50"
+                  >
+                    <option value="all">Все объекты</option>
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>{l.name} — {l.address}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Скачать как</p>
+              {(() => {
+                const isLoading = generating === "loc-xlsx";
+                return (
+                  <button
+                    onClick={() => handle("loc-xlsx", () => exportLocationReportExcel(buildLocationReport(locFilter, locDateFrom, locDateTo)))}
+                    disabled={!!generating}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
+                      {isLoading
+                        ? <Icon name="Loader2" size={15} className="animate-spin text-emerald-400" />
+                        : <Icon name="Table" size={15} className="text-emerald-400" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-emerald-400">{isLoading ? "Генерация..." : "Excel"}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {locFilter === "all" ? `${locations.length} листов + сводка` : "1 лист с детализацией по сотрудникам"}
+                      </p>
+                    </div>
+                    {!isLoading && <Icon name="Download" size={14} className="text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* Info banner */}

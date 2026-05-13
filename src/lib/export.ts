@@ -620,3 +620,181 @@ export function exportFinesExcel(data: FinesReportData): void {
   const safeName = data.orgName.replace(/[^а-яёa-z0-9]/gi, "_");
   XLSX.writeFile(wb, `SecureOps_Штрафы_${safeName}_${data.generatedAt.replace(/\./g, "-")}.xlsx`);
 }
+
+// ─── Employee Report Types ────────────────────────────────────────────────────
+export interface EmployeeReportDayRow {
+  date: string;
+  locationName: string;
+  postName: string;
+  hoursWorked: number;
+  baseRate: number;
+  bonus: number;
+  totalRate: number;
+  earned: number;
+  finesAmount: number;
+  net: number;
+  isExtraShift: boolean;
+}
+
+export interface EmployeeReportRow {
+  employeeId: number;
+  employeeName: string;
+  rank: string;
+  days: EmployeeReportDayRow[];
+  totalHours: number;
+  totalEarned: number;
+  totalFines: number;
+  totalNet: number;
+}
+
+export interface EmployeeReportData {
+  orgName: string;
+  holdingName: string;
+  generatedAt: string;
+  periodFrom: string;
+  periodTo: string;
+  filterLabel: string;
+  rows: EmployeeReportRow[];
+  grandTotalHours: number;
+  grandTotalEarned: number;
+  grandTotalFines: number;
+  grandTotalNet: number;
+}
+
+// ─── Location Report Types ────────────────────────────────────────────────────
+export interface LocationReportEmpRow {
+  employeeName: string;
+  rank: string;
+  postName: string;
+  hoursWorked: number;
+  rate: number;
+  earned: number;
+  isExtraShift: boolean;
+}
+
+export interface LocationReportRow {
+  locationName: string;
+  locationAddress: string;
+  employees: LocationReportEmpRow[];
+  totalHours: number;
+  totalEarned: number;
+}
+
+export interface LocationReportData {
+  orgName: string;
+  holdingName: string;
+  generatedAt: string;
+  periodFrom: string;
+  periodTo: string;
+  filterLabel: string;
+  rows: LocationReportRow[];
+  grandTotalHours: number;
+  grandTotalEarned: number;
+}
+
+// ─── Employee Report Excel ────────────────────────────────────────────────────
+export function exportEmployeeReportExcel(data: EmployeeReportData): void {
+  const wb = XLSX.utils.book_new();
+
+  data.rows.forEach(emp => {
+    const sheetData: (string | number)[][] = [
+      [`Отчёт по сотруднику: ${emp.employeeName}`],
+      [`${data.orgName}  ·  Период: ${data.periodFrom} — ${data.periodTo}  ·  Сформирован: ${data.generatedAt}`],
+      [`Должность: ${emp.rank}`],
+      [],
+      ["Дата", "Объект", "Пост", "Подработка", "Часов", "Тариф ₽/ч", "Надбавка ₽/ч", "Итого ₽/ч", "Начислено ₽", "Штрафы ₽", "К выплате ₽"],
+      ...emp.days.map(d => [
+        d.date,
+        d.locationName,
+        d.postName,
+        d.isExtraShift ? "Да" : "—",
+        d.hoursWorked,
+        d.baseRate,
+        d.bonus,
+        d.totalRate,
+        d.earned,
+        d.finesAmount > 0 ? d.finesAmount : "—",
+        d.net,
+      ]),
+      [],
+      ["ИТОГО", "", "", "", emp.totalHours, "", "", "", emp.totalEarned, emp.totalFines > 0 ? emp.totalFines : 0, emp.totalNet],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    ws["!cols"] = [
+      { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 11 },
+      { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+      { wch: 14 }, { wch: 11 }, { wch: 14 },
+    ];
+    const safeName = emp.employeeName.replace(/[^а-яёa-z0-9 ]/gi, "").slice(0, 28);
+    XLSX.utils.book_append_sheet(wb, ws, safeName);
+  });
+
+  // Сводный лист
+  const summaryData: (string | number)[][] = [
+    [`Сводный отчёт по сотрудникам — ${data.filterLabel}`],
+    [`${data.orgName}  ·  Период: ${data.periodFrom} — ${data.periodTo}  ·  Сформирован: ${data.generatedAt}`],
+    [],
+    ["#", "Сотрудник", "Должность", "Часов отработано", "Начислено ₽", "Штрафы ₽", "К выплате ₽"],
+    ...data.rows.map((r, i) => [i + 1, r.employeeName, r.rank, r.totalHours, r.totalEarned, r.totalFines, r.totalNet]),
+    [],
+    ["", "ИТОГО", "", data.grandTotalHours, data.grandTotalEarned, data.grandTotalFines, data.grandTotalNet],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary["!cols"] = [{ wch: 5 }, { wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Сводка");
+
+  const period = `${data.periodFrom}_${data.periodTo}`.replace(/\./g, "-");
+  XLSX.writeFile(wb, `SecureOps_Сотрудники_${period}.xlsx`);
+}
+
+// ─── Location Report Excel ────────────────────────────────────────────────────
+export function exportLocationReportExcel(data: LocationReportData): void {
+  const wb = XLSX.utils.book_new();
+
+  data.rows.forEach(loc => {
+    const sheetData: (string | number)[][] = [
+      [`Отчёт по объекту: ${loc.locationName}`],
+      [`${data.orgName}  ·  Период: ${data.periodFrom} — ${data.periodTo}  ·  Сформирован: ${data.generatedAt}`],
+      [`Адрес: ${loc.locationAddress}`],
+      [],
+      ["Сотрудник", "Должность", "Пост", "Подработка", "Часов", "Тариф ₽/ч", "Начислено ₽"],
+      ...loc.employees.map(e => [
+        e.employeeName,
+        e.rank,
+        e.postName,
+        e.isExtraShift ? "Да" : "—",
+        e.hoursWorked,
+        e.rate,
+        e.earned,
+      ]),
+      [],
+      ["ИТОГО", "", "", "", loc.totalHours, "", loc.totalEarned],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    ws["!cols"] = [
+      { wch: 26 }, { wch: 16 }, { wch: 18 }, { wch: 11 },
+      { wch: 8 }, { wch: 12 }, { wch: 14 },
+    ];
+    const safeName = loc.locationName.replace(/[^а-яёa-z0-9 ]/gi, "").slice(0, 28);
+    XLSX.utils.book_append_sheet(wb, ws, safeName);
+  });
+
+  // Сводный лист
+  const summaryData: (string | number)[][] = [
+    [`Сводный отчёт по объектам — ${data.filterLabel}`],
+    [`${data.orgName}  ·  Период: ${data.periodFrom} — ${data.periodTo}  ·  Сформирован: ${data.generatedAt}`],
+    [],
+    ["#", "Объект", "Адрес", "Сотрудников", "Часов отработано", "Начислено ₽"],
+    ...data.rows.map((r, i) => [i + 1, r.locationName, r.locationAddress, r.employees.length, r.totalHours, r.totalEarned]),
+    [],
+    ["", "ИТОГО", "", data.rows.reduce((s, r) => s + r.employees.length, 0), data.grandTotalHours, data.grandTotalEarned],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary["!cols"] = [{ wch: 5 }, { wch: 24 }, { wch: 30 }, { wch: 14 }, { wch: 18 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Сводка");
+
+  const period = `${data.periodFrom}_${data.periodTo}`.replace(/\./g, "-");
+  XLSX.writeFile(wb, `SecureOps_Объекты_${period}.xlsx`);
+}
