@@ -53,7 +53,7 @@ const NAV_ITEMS: { key: Section; label: string; icon: string; perm?: string; hol
 ];
 
 // ─── Location Form ────────────────────────────────────────────────────────────
-const EMPTY_LOC: Omit<Location, "id" | "orgId"> = { name: "", address: "", type: "office", posts: 1, contact: "", note: "" };
+const EMPTY_LOC: Omit<Location, "id" | "orgId"> = { name: "", address: "", type: "office", posts: 1, contact: "", note: "", hourlyRate: 200 };
 
 function LocationModal({ initial, onSave, onClose, title }: {
   initial: Omit<Location, "id" | "orgId"> | null;
@@ -81,9 +81,12 @@ function LocationModal({ initial, onSave, onClose, title }: {
             </Field>
           </div>
           <Field label="Адрес" req><input value={form.address} onChange={e => set("address", e.target.value)} placeholder="ул. Примерная, 1" className={inputCls} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Field label="Контакт"><input value={form.contact} onChange={e => set("contact", e.target.value)} placeholder="+7 900 000-00-00" className={inputCls} /></Field>
             <Field label="Постов"><input type="number" min={1} max={99} value={form.posts} onChange={e => set("posts", parseInt(e.target.value) || 1)} className={inputCls} /></Field>
+            <Field label="Тариф, ₽/час">
+              <input type="number" min={0} step={10} value={form.hourlyRate} onChange={e => set("hourlyRate", parseInt(e.target.value) || 0)} className={inputCls} />
+            </Field>
           </div>
           <Field label="Примечание"><textarea value={form.note} onChange={e => set("note", e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder="Особые условия..." /></Field>
         </div>
@@ -428,36 +431,309 @@ function Placements() {
   );
 }
 
+// ─── Employee Modal ───────────────────────────────────────────────────────────
+type EmpForm = Omit<import("@/types").Employee, "id" | "orgId">;
+
+const EMPTY_EMP: EmpForm = {
+  name: "", rank: "Охранник", status: "active", location: "—",
+  shift: "08:00 – 20:00", phone: "", hireDate: "", yearsExp: 0, seniorityBonus: 0, note: "",
+};
+
+function EmployeeModal({ initial, onSave, onClose, title }: {
+  initial: EmpForm | null;
+  onSave: (d: EmpForm) => void;
+  onClose: () => void;
+  title: string;
+}) {
+  const [form, setForm] = useState<EmpForm>(initial ?? EMPTY_EMP);
+  const set = <K extends keyof EmpForm>(k: K, v: EmpForm[K]) => setForm(f => ({ ...f, [k]: v }));
+  const valid = form.name.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col section-enter" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 border-b border-border shrink-0">
+          <h3 className="font-bold text-lg text-foreground">{title}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><Icon name="X" size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* ФИО + Должность */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Полное имя" req>
+              <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Фамилия Имя Отчество" className={inputCls} />
+            </Field>
+            <Field label="Должность">
+              <select value={form.rank} onChange={e => set("rank", e.target.value)} className={inputCls}>
+                {["Охранник", "Ст. охранник", "Руководитель группы", "Стажёр"].map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {/* Статус + Телефон */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Статус">
+              <select value={form.status} onChange={e => set("status", e.target.value as EmpForm["status"])} className={inputCls}>
+                <option value="active">На смене</option>
+                <option value="off">Выходной</option>
+                <option value="sick">Больничный</option>
+              </select>
+            </Field>
+            <Field label="Телефон">
+              <input value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="+7 900 000-00-00" className={inputCls} />
+            </Field>
+          </div>
+
+          {/* Смена + Локация */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="График смены">
+              <select value={form.shift} onChange={e => set("shift", e.target.value)} className={inputCls}>
+                {["08:00 – 20:00", "20:00 – 08:00", "Выходной", "Больничный", "Отпуск"].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Текущий объект">
+              <input value={form.location} onChange={e => set("location", e.target.value)} placeholder="Объект А — Главный вход" className={inputCls} />
+            </Field>
+          </div>
+
+          {/* Дата приёма + Стаж */}
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Дата приёма на работу">
+              <input type="date" value={form.hireDate} onChange={e => set("hireDate", e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Стаж в охране, лет">
+              <input type="number" min={0} max={50} value={form.yearsExp} onChange={e => set("yearsExp", parseInt(e.target.value) || 0)} className={inputCls} />
+            </Field>
+          </div>
+
+          {/* Надбавка */}
+          <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl space-y-3">
+            <div className="flex items-center gap-2">
+              <Icon name="TrendingUp" size={15} className="text-amber-400" />
+              <p className="text-sm font-semibold text-foreground">Надбавка за выслугу лет</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 items-end">
+              <Field label="Надбавка, ₽/час">
+                <input type="number" min={0} step={5} value={form.seniorityBonus} onChange={e => set("seniorityBonus", parseInt(e.target.value) || 0)} className={inputCls} />
+              </Field>
+              <div className="pb-2.5 text-xs text-muted-foreground">
+                {form.yearsExp >= 10 && <span className="text-emerald-400">≥ 10 лет: рекомендуется +40–50 ₽/ч</span>}
+                {form.yearsExp >= 5 && form.yearsExp < 10 && <span className="text-primary">5–9 лет: рекомендуется +20–35 ₽/ч</span>}
+                {form.yearsExp > 0 && form.yearsExp < 5 && <span className="text-muted-foreground">1–4 лет: рекомендуется +10–20 ₽/ч</span>}
+                {form.yearsExp === 0 && <span className="text-muted-foreground">Стаж не указан</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Примечание */}
+          <Field label="Примечание">
+            <textarea value={form.note} onChange={e => set("note", e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder="Дополнительная информация..." />
+          </Field>
+        </div>
+
+        <div className="flex gap-3 p-6 border-t border-border shrink-0">
+          <button onClick={() => valid && onSave(form)} disabled={!valid} className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">Сохранить</button>
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-secondary">Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeDeleteModal({ name, onConfirm, onClose }: { name: string; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-card border border-red-500/20 rounded-2xl p-6 w-full max-w-sm section-enter" onClick={e => e.stopPropagation()}>
+        <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center mb-4"><Icon name="UserX" size={22} className="text-red-400" /></div>
+        <h3 className="font-bold text-lg text-foreground mb-2">Удалить сотрудника?</h3>
+        <p className="text-sm text-muted-foreground mb-6">«{name}» будет удалён из базы. Это действие нельзя отменить.</p>
+        <div className="flex gap-3">
+          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Удалить</button>
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-muted text-foreground text-sm hover:bg-secondary">Отмена</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Employees Section ────────────────────────────────────────────────────────
 function Employees() {
-  const { employees } = useApp();
+  const { employees, addEmployee, editEmployee, deleteEmployee, locations, can } = useApp();
+  const canEdit = can("employees:edit");
+
   const [filter, setFilter] = useState<"all" | "active" | "off" | "sick">("all");
-  const filtered = filter === "all" ? employees : employees.filter(e => e.status === filter);
-  const badge = (s: "active" | "off" | "sick") => s === "active" ? <span className="badge-active">На смене</span> : s === "sick" ? <span className="badge-danger">Больничный</span> : <span className="badge-inactive">Выходной</span>;
+  const [search, setSearch] = useState("");
+  const [modal, setModal] = useState<"add" | "edit" | "delete" | null>(null);
+  const [target, setTarget] = useState<import("@/types").Employee | null>(null);
+  const close = () => { setModal(null); setTarget(null); };
+
+  const filtered = employees
+    .filter(e => filter === "all" || e.status === filter)
+    .filter(e => !search || e.name.toLowerCase().includes(search.toLowerCase()) || e.rank.toLowerCase().includes(search.toLowerCase()));
+
+  const badge = (s: "active" | "off" | "sick") =>
+    s === "active" ? <span className="badge-active">На смене</span>
+    : s === "sick" ? <span className="badge-danger">Больничный</span>
+    : <span className="badge-inactive">Выходной</span>;
+
+  const fmtBonus = (n: number) => n > 0 ? `+${n} ₽/ч` : "—";
+  const fmtRate = (e: import("@/types").Employee) => {
+    const post = locations.find(l => l.id === undefined); // placeholder — see below
+    void post;
+    return e.seniorityBonus > 0 ? `${e.seniorityBonus} ₽/ч` : "—";
+  };
+  void fmtRate;
+
+  // Total rate = object rate + seniority bonus (derived from post assignment)
+  const getEffectiveRate = (e: import("@/types").Employee) => {
+    // find object by name match in location field
+    const loc = locations.find(l => e.location.startsWith(l.name));
+    const base = loc?.hourlyRate ?? 0;
+    return { base, bonus: e.seniorityBonus, total: base + e.seniorityBonus };
+  };
+
+  const counts = {
+    all: employees.length,
+    active: employees.filter(e => e.status === "active").length,
+    off: employees.filter(e => e.status === "off").length,
+    sick: employees.filter(e => e.status === "sick").length,
+  };
+
   return (
     <div className="section-enter space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-foreground">Сотрудники</h2><p className="text-muted-foreground text-sm mt-1">База охранников</p></div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"><Icon name="UserPlus" size={16} /> Добавить</button>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Сотрудники</h2>
+          <p className="text-muted-foreground text-sm mt-1">{employees.length} охранников в базе</p>
+        </div>
+        {canEdit && (
+          <button onClick={() => { setTarget(null); setModal("add"); }} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 shrink-0">
+            <Icon name="UserPlus" size={16} /> Добавить
+          </button>
+        )}
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {[{ k: "all", l: "Все" }, { k: "active", l: "На смене" }, { k: "off", l: "Выходной" }, { k: "sick", l: "Больничный" }].map(f => (
-          <button key={f.k} onClick={() => setFilter(f.k as "all" | "active" | "off" | "sick")} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === f.k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>{f.l}</button>
-        ))}
+
+      {/* Filters + Search */}
+      <div className="flex gap-3 flex-wrap items-center">
+        <div className="flex gap-1.5 flex-wrap">
+          {([["all", "Все"], ["active", "На смене"], ["off", "Выходной"], ["sick", "Больничный"]] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${filter === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+              {l}
+              <span className={`text-[10px] font-mono px-1 py-0.5 rounded-full ${filter === k ? "bg-white/20 text-white" : "bg-background/60 text-muted-foreground"}`}>{counts[k]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px]">
+          <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по имени..." className="w-full bg-card border border-border rounded-xl pl-9 pr-4 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+          {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"><Icon name="X" size={13} /></button>}
+        </div>
       </div>
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto"><table className="w-full min-w-[600px]">
-          <thead><tr className="border-b border-border">{["Сотрудник", "Должность", "Статус", "Смена", "Телефон"].map(h => <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">{h}</th>)}</tr></thead>
-          <tbody>{filtered.map(e => (
-            <tr key={e.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
-              <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">{e.name.split(" ").map(n => n[0]).join("").slice(0, 2)}</div><span className="font-medium text-foreground text-sm">{e.name}</span></div></td>
-              <td className="px-5 py-4 text-sm text-muted-foreground">{e.rank}</td>
-              <td className="px-5 py-4">{badge(e.status)}</td>
-              <td className="px-5 py-4 text-xs font-mono text-muted-foreground">{e.shift}</td>
-              <td className="px-5 py-4 text-xs font-mono text-muted-foreground">{e.phone}</td>
-            </tr>
-          ))}</tbody>
-        </table></div>
+
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <div className="bg-card border border-border rounded-xl p-12 text-center">
+          <Icon name="Users" size={40} className="text-muted-foreground mx-auto mb-3 opacity-40" />
+          <p className="text-sm text-muted-foreground">{search ? "Ничего не найдено" : "Нет сотрудников в этой категории"}</p>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px]">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Сотрудник", "Должность", "Статус", "Стаж", "Тариф объекта", "Надбавка", "Итого ₽/ч", ""].map(h => (
+                    <th key={h} className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(e => {
+                  const rate = getEffectiveRate(e);
+                  return (
+                    <tr key={e.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors group">
+                      {/* Имя */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                            {e.name.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground">{e.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{e.location}</p>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Должность */}
+                      <td className="px-4 py-3.5 text-sm text-muted-foreground">{e.rank}</td>
+                      {/* Статус */}
+                      <td className="px-4 py-3.5">{badge(e.status)}</td>
+                      {/* Стаж */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-mono text-foreground">{e.yearsExp}</span>
+                          <span className="text-xs text-muted-foreground">лет</span>
+                          {e.yearsExp >= 10 && <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">Ветеран</span>}
+                        </div>
+                      </td>
+                      {/* Тариф объекта */}
+                      <td className="px-4 py-3.5">
+                        {rate.base > 0
+                          ? <span className="text-sm font-mono text-foreground">{rate.base} ₽/ч</span>
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      {/* Надбавка */}
+                      <td className="px-4 py-3.5">
+                        {e.seniorityBonus > 0
+                          ? <span className="text-sm font-mono text-amber-400">+{e.seniorityBonus} ₽/ч</span>
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      {/* Итого */}
+                      <td className="px-4 py-3.5">
+                        {rate.total > 0
+                          ? <span className="text-sm font-mono font-semibold text-emerald-400">{rate.total} ₽/ч</span>
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      {/* Actions */}
+                      <td className="px-4 py-3.5">
+                        {canEdit && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => { setTarget(e); setModal("edit"); }} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                              <Icon name="Pencil" size={14} />
+                            </button>
+                            <button onClick={() => { setTarget(e); setModal("delete"); }} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
+                              <Icon name="Trash2" size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="flex gap-4 text-xs text-muted-foreground px-1">
+        <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40 inline-block" /> Тариф — базовая ставка объекта</div>
+        <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Надбавка за выслугу лет</div>
+        <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" /> Итого = тариф + надбавка</div>
       </div>
+
+      {/* Modals */}
+      {modal === "add" && (
+        <EmployeeModal title="Новый сотрудник" initial={null} onSave={d => { addEmployee(d); close(); }} onClose={close} />
+      )}
+      {modal === "edit" && target && (
+        <EmployeeModal title={`Редактировать — ${target.name}`} initial={target} onSave={d => { editEmployee(target.id, d); close(); }} onClose={close} />
+      )}
+      {modal === "delete" && target && (
+        <EmployeeDeleteModal name={target.name} onConfirm={() => { deleteEmployee(target.id); close(); }} onClose={close} />
+      )}
     </div>
   );
 }

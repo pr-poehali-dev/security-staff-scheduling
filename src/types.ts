@@ -90,6 +90,7 @@ export interface Location {
   posts: number;
   contact: string;
   note: string;
+  hourlyRate: number;    // тариф охранника за час на объекте, ₽
 }
 
 export interface Employee {
@@ -101,6 +102,10 @@ export interface Employee {
   location: string;
   shift: string;
   phone: string;
+  hireDate: string;          // ISO date — дата приёма
+  yearsExp: number;          // стаж в годах
+  seniorityBonus: number;    // надбавка за выслугу, ₽/час
+  note: string;
 }
 
 export interface Post {

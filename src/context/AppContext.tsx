@@ -46,6 +46,9 @@ interface AppContextValue {
   deleteLocation: (id: number) => void;
 
   employees: Employee[];
+  addEmployee: (d: Omit<Employee, "id" | "orgId">) => void;
+  editEmployee: (id: number, d: Omit<Employee, "id" | "orgId">) => void;
+  deleteEmployee: (id: number) => void;
 
   posts: Post[];
   assignPost: (postId: number, officerId: number | null, fine: Omit<FineRecord, "id" | "date" | "postId" | "orgId"> | null) => void;
@@ -82,7 +85,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
 
   const [allLocations, setAllLocations] = useState<Location[]>(INIT_LOCATIONS);
-  const [allEmployees] = useState<Employee[]>(INIT_EMPLOYEES);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>(INIT_EMPLOYEES);
   const [allPosts, setAllPosts] = useState<Post[]>(INIT_POSTS);
   const [allFineReasons, setAllFineReasons] = useState<FineReason[]>(INIT_FINE_REASONS);
   const [allFines, setAllFines] = useState<FineRecord[]>(INIT_FINES);
@@ -161,6 +164,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteLocation = (id: number) =>
     setAllLocations(prev => prev.filter(l => l.id !== id));
 
+  const addEmployee = (d: Omit<Employee, "id" | "orgId">) =>
+    setAllEmployees(prev => [...prev, { id: maxId(prev) + 1, orgId: currentOrgId, ...d }]);
+  const editEmployee = (id: number, d: Omit<Employee, "id" | "orgId">) =>
+    setAllEmployees(prev => prev.map(e => e.id === id ? { id, orgId: currentOrgId, ...d } : e));
+  const deleteEmployee = (id: number) =>
+    setAllEmployees(prev => prev.filter(e => e.id !== id));
+
   const assignPost = (
     postId: number,
     officerId: number | null,
@@ -186,7 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     roles, addRole, editRole, deleteRole,
     users, addUser, editUser, deleteUser,
     locations, addLocation, editLocation, deleteLocation,
-    employees,
+    employees, addEmployee, editEmployee, deleteEmployee,
     posts, assignPost,
     fineReasons, setFineReasons,
     fines,

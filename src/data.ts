@@ -117,31 +117,29 @@ export const INIT_USERS: AppUser[] = [
 
 // ─── Org 1 data ───────────────────────────────────────────────────────────────
 export const INIT_LOCATIONS: Location[] = [
-  { id: 1, orgId: 1, name: "Объект А", address: "ул. Ленина, 10, Москва",       type: "office",      posts: 3, contact: "+7 900 100-00-01", note: "Бизнес-центр класса А" },
-  { id: 2, orgId: 1, name: "Объект Б", address: "ул. Промышленная, 5, Москва",  type: "warehouse",   posts: 3, contact: "+7 900 100-00-02", note: "Складской комплекс" },
-  { id: 3, orgId: 1, name: "Объект В", address: "пр. Мира, 22, Москва",         type: "retail",      posts: 2, contact: "+7 900 100-00-03", note: "Торговый центр" },
-  // Org 2
-  { id: 4, orgId: 2, name: "Объект С-1", address: "пр. Невский, 100, СПб",     type: "office",      posts: 2, contact: "+7 900 200-00-01", note: "Офис класса Б" },
-  { id: 5, orgId: 2, name: "Объект С-2", address: "ул. Заводская, 3, СПб",     type: "industrial",  posts: 4, contact: "+7 900 200-00-02", note: "Завод" },
-  // Org 3
-  { id: 6, orgId: 3, name: "Объект Ю-1", address: "ул. Красная, 55, Краснодар", type: "retail",     posts: 2, contact: "+7 900 300-00-01", note: "ТРЦ" },
+  { id: 1, orgId: 1, name: "Объект А", address: "ул. Ленина, 10, Москва",        type: "office",      posts: 3, contact: "+7 900 100-00-01", note: "Бизнес-центр класса А",  hourlyRate: 220 },
+  { id: 2, orgId: 1, name: "Объект Б", address: "ул. Промышленная, 5, Москва",   type: "warehouse",   posts: 3, contact: "+7 900 100-00-02", note: "Складской комплекс",      hourlyRate: 200 },
+  { id: 3, orgId: 1, name: "Объект В", address: "пр. Мира, 22, Москва",          type: "retail",      posts: 2, contact: "+7 900 100-00-03", note: "Торговый центр",           hourlyRate: 210 },
+  { id: 4, orgId: 2, name: "Объект С-1", address: "пр. Невский, 100, СПб",      type: "office",      posts: 2, contact: "+7 900 200-00-01", note: "Офис класса Б",           hourlyRate: 230 },
+  { id: 5, orgId: 2, name: "Объект С-2", address: "ул. Заводская, 3, СПб",      type: "industrial",  posts: 4, contact: "+7 900 200-00-02", note: "Завод",                    hourlyRate: 240 },
+  { id: 6, orgId: 3, name: "Объект Ю-1", address: "ул. Красная, 55, Краснодар", type: "retail",      posts: 2, contact: "+7 900 300-00-01", note: "ТРЦ",                      hourlyRate: 195 },
 ];
 
 export const INIT_EMPLOYEES: Employee[] = [
   // Org 1
-  { id: 1, orgId: 1, name: "Иванов Сергей А.",    rank: "Ст. охранник", status: "active", location: "Объект А — Главный вход",  shift: "08:00 – 20:00", phone: "+7 900 123-45-67" },
-  { id: 2, orgId: 1, name: "Петров Андрей В.",     rank: "Охранник",     status: "active", location: "Объект А — Периметр",      shift: "08:00 – 20:00", phone: "+7 900 234-56-78" },
-  { id: 3, orgId: 1, name: "Смирнова Елена К.",    rank: "Охранник",     status: "active", location: "Объект Б — КПП",           shift: "20:00 – 08:00", phone: "+7 900 345-67-89" },
-  { id: 4, orgId: 1, name: "Козлов Дмитрий И.",   rank: "Охранник",     status: "off",    location: "—",                        shift: "Выходной",      phone: "+7 900 456-78-90" },
-  { id: 5, orgId: 1, name: "Николаева Ирина Р.",   rank: "Ст. охранник", status: "active", location: "Объект В — Парковка",      shift: "08:00 – 20:00", phone: "+7 900 567-89-01" },
-  { id: 6, orgId: 1, name: "Волков Павел С.",      rank: "Охранник",     status: "sick",   location: "—",                        shift: "Больничный",    phone: "+7 900 678-90-12" },
-  { id: 7, orgId: 1, name: "Морозов Алексей Г.",   rank: "Охранник",     status: "active", location: "Объект Б — Склад",         shift: "08:00 – 20:00", phone: "+7 900 789-01-23" },
-  { id: 8, orgId: 1, name: "Фёдорова Наталья В.",  rank: "Охранник",     status: "active", location: "Объект В — Главный вход",  shift: "20:00 – 08:00", phone: "+7 900 890-12-34" },
+  { id: 1,  orgId: 1, name: "Иванов Сергей А.",   rank: "Ст. охранник", status: "active", location: "Объект А — Главный вход", shift: "08:00 – 20:00", phone: "+7 900 123-45-67", hireDate: "2018-03-15", yearsExp: 8,  seniorityBonus: 40, note: "" },
+  { id: 2,  orgId: 1, name: "Петров Андрей В.",    rank: "Охранник",     status: "active", location: "Объект А — Периметр",     shift: "08:00 – 20:00", phone: "+7 900 234-56-78", hireDate: "2021-07-01", yearsExp: 5,  seniorityBonus: 25, note: "" },
+  { id: 3,  orgId: 1, name: "Смирнова Елена К.",   rank: "Охранник",     status: "active", location: "Объект Б — КПП",          shift: "20:00 – 08:00", phone: "+7 900 345-67-89", hireDate: "2022-01-10", yearsExp: 4,  seniorityBonus: 20, note: "" },
+  { id: 4,  orgId: 1, name: "Козлов Дмитрий И.",  rank: "Охранник",     status: "off",    location: "—",                       shift: "Выходной",      phone: "+7 900 456-78-90", hireDate: "2023-05-20", yearsExp: 3,  seniorityBonus: 15, note: "" },
+  { id: 5,  orgId: 1, name: "Николаева Ирина Р.",  rank: "Ст. охранник", status: "active", location: "Объект В — Парковка",     shift: "08:00 – 20:00", phone: "+7 900 567-89-01", hireDate: "2016-11-05", yearsExp: 10, seniorityBonus: 50, note: "" },
+  { id: 6,  orgId: 1, name: "Волков Павел С.",     rank: "Охранник",     status: "sick",   location: "—",                       shift: "Больничный",    phone: "+7 900 678-90-12", hireDate: "2024-02-14", yearsExp: 2,  seniorityBonus: 0,  note: "Больничный лист до 20.05" },
+  { id: 7,  orgId: 1, name: "Морозов Алексей Г.",  rank: "Охранник",     status: "active", location: "Объект Б — Склад",        shift: "08:00 – 20:00", phone: "+7 900 789-01-23", hireDate: "2020-09-01", yearsExp: 6,  seniorityBonus: 30, note: "" },
+  { id: 8,  orgId: 1, name: "Фёдорова Наталья В.", rank: "Охранник",     status: "active", location: "Объект В — Главный вход", shift: "20:00 – 08:00", phone: "+7 900 890-12-34", hireDate: "2019-06-15", yearsExp: 7,  seniorityBonus: 35, note: "" },
   // Org 2
-  { id: 9,  orgId: 2, name: "Громов Илья К.",      rank: "Ст. охранник", status: "active", location: "Объект С-1 — Вход",        shift: "08:00 – 20:00", phone: "+7 900 111-00-01" },
-  { id: 10, orgId: 2, name: "Зайцева Анна П.",     rank: "Охранник",     status: "active", location: "Объект С-2 — КПП",         shift: "08:00 – 20:00", phone: "+7 900 111-00-02" },
+  { id: 9,  orgId: 2, name: "Громов Илья К.",     rank: "Ст. охранник", status: "active", location: "Объект С-1 — Вход",       shift: "08:00 – 20:00", phone: "+7 900 111-00-01", hireDate: "2017-04-10", yearsExp: 9,  seniorityBonus: 45, note: "" },
+  { id: 10, orgId: 2, name: "Зайцева Анна П.",    rank: "Охранник",     status: "active", location: "Объект С-2 — КПП",        shift: "08:00 – 20:00", phone: "+7 900 111-00-02", hireDate: "2022-08-22", yearsExp: 4,  seniorityBonus: 20, note: "" },
   // Org 3
-  { id: 11, orgId: 3, name: "Тихонов Роман В.",    rank: "Охранник",     status: "active", location: "Объект Ю-1 — Вход",        shift: "08:00 – 20:00", phone: "+7 900 222-00-01" },
+  { id: 11, orgId: 3, name: "Тихонов Роман В.",   rank: "Охранник",     status: "active", location: "Объект Ю-1 — Вход",       shift: "08:00 – 20:00", phone: "+7 900 222-00-01", hireDate: "2021-03-01", yearsExp: 5,  seniorityBonus: 25, note: "" },
 ];
 
 export const INIT_POSTS: Post[] = [
