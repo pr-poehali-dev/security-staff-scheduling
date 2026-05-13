@@ -207,16 +207,25 @@ function AssignModal({ post, onAssign, onClose }: {
 
   const isReplacement = curEmp !== null && selId !== post.officerId;
 
-  // Группировка сотрудников: доступные → на выходном (подработка) → занятые → больничный
+  // Группировка: текущий → выходные/подработка → занятые на других постах → больничный
+  // Сотрудники со статусом "active" скрываются (они уже на смене), кроме текущего на этом посту
   const searchLower = search.toLowerCase();
   const sortedEmps = [...employees]
-    .filter(e => !searchLower || e.name.toLowerCase().includes(searchLower) || e.rank.toLowerCase().includes(searchLower))
+    .filter(e => {
+      // Всегда показываем текущего назначенного
+      if (e.id === post.officerId) return true;
+      // Скрываем активных — они уже на смене
+      if (e.status === "active") return false;
+      // Поиск по имени/должности
+      return !searchLower || e.name.toLowerCase().includes(searchLower) || e.rank.toLowerCase().includes(searchLower);
+    })
+    .filter(e => !searchLower || e.id === post.officerId || e.name.toLowerCase().includes(searchLower) || e.rank.toLowerCase().includes(searchLower))
     .sort((a, b) => {
       const order = (e: typeof a) => {
-        if (e.id === post.officerId) return 0;
-        if (busyIds.has(e.id)) return 3;
-        if (e.status === "sick") return 4;
-        if (e.status === "off" || e.status === "extra") return 2;
+        if (e.id === post.officerId) return 0;   // текущий — первым
+        if (e.status === "off" || e.status === "extra") return 1; // выходные/подработка
+        if (busyIds.has(e.id)) return 2;          // занятые на других постах
+        if (e.status === "sick") return 3;         // больничный — в конце
         return 1;
       };
       return order(a) - order(b);
@@ -275,24 +284,30 @@ function AssignModal({ post, onAssign, onClose }: {
               {selId === null && <Icon name="Check" size={14} className="text-amber-400 shrink-0" />}
             </button>
 
+            {sortedEmps.length === 0 && (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                <Icon name="UserX" size={28} className="mx-auto mb-2 opacity-30" />
+                {searchLower ? "Никого не найдено" : "Нет доступных сотрудников"}
+                <p className="text-[10px] mt-1 text-muted-foreground/60">Сотрудники «На смене» уже задействованы</p>
+              </div>
+            )}
+
             {sortedEmps.map(e => {
               const isCurrent = e.id === post.officerId;
               const isBusy = busyIds.has(e.id) && !isCurrent;
               const isSick = e.status === "sick";
-              const isOff = e.status === "off" || e.status === "extra";
               const statusInfo = empStatusLabel(e.status);
               const isSelected = selId === e.id;
 
               return (
                 <button
                   key={e.id}
-                  onClick={() => !isSick && setSelId(e.id)}
-                  disabled={isSick}
+                  onClick={() => !isSick && !isBusy && setSelId(e.id)}
+                  disabled={isSick || isBusy}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all
-                    ${isSick         ? "border-border/40 bg-muted/20 opacity-50 cursor-not-allowed" :
-                      isSelected     ? "border-primary/50 bg-primary/8" :
-                      isBusy         ? "border-border/40 bg-muted/20 opacity-60" :
-                                       "border-border bg-muted/30 hover:bg-muted/60"}`}
+                    ${isSick || isBusy ? "border-border/40 bg-muted/20 opacity-50 cursor-not-allowed" :
+                      isSelected       ? "border-primary/50 bg-primary/8" :
+                                         "border-border bg-muted/30 hover:bg-muted/60"}`}
                 >
                   {/* Аватар */}
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0
@@ -305,7 +320,7 @@ function AssignModal({ post, onAssign, onClose }: {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-foreground truncate">{e.name}</p>
                       {isCurrent && <span className="text-[10px] text-primary border border-primary/30 rounded px-1.5 py-0.5 bg-primary/10 shrink-0">текущий</span>}
-                      {isBusy && <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5 shrink-0">занят</span>}
+                      {isBusy && <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5 shrink-0">занят на посту</span>}
                     </div>
                     <p className="text-[10px] text-muted-foreground">{e.rank}</p>
                   </div>
@@ -321,6 +336,13 @@ function AssignModal({ post, onAssign, onClose }: {
               );
             })}
           </div>
+
+          {/* Подсказка: активные скрыты */}
+          {!searchLower && (
+            <p className="text-[10px] text-muted-foreground/60 text-center">
+              Сотрудники со статусом «На смене» скрыты — они уже задействованы
+            </p>
+          )}
 
           {/* Флаг подработки */}
           {selEmp && (selEmp.status === "off" || selEmp.status === "extra") && (
