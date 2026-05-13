@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import type { Organization } from "@/types";
 import Icon from "@/components/ui/icon";
+import ConsolidatedReport from "@/components/ConsolidatedReport";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) => n.toLocaleString("ru-RU") + " ₽";
@@ -278,6 +279,7 @@ export default function HoldingSection({ onSwitchOrg }: { onSwitchOrg: (orgId: n
     users,
   } = useApp();
 
+  const [tab, setTab] = useState<"orgs" | "report">("orgs");
   const [modal, setModal] = useState<"add" | "edit" | "delete" | "detail" | null>(null);
   const [target, setTarget] = useState<Organization | null>(null);
   const close = () => { setModal(null); setTarget(null); };
@@ -315,13 +317,39 @@ export default function HoldingSection({ onSwitchOrg }: { onSwitchOrg: (orgId: n
           <h2 className="text-2xl font-bold text-foreground">Холдинг</h2>
           <p className="text-muted-foreground text-sm mt-1">{holding.name} · ИНН {holding.inn}</p>
         </div>
-        <button
-          onClick={() => { setTarget(null); setModal("add"); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 shrink-0"
-        >
-          <Icon name="Plus" size={16} /> Добавить организацию
-        </button>
+        {tab === "orgs" && (
+          <button
+            onClick={() => { setTarget(null); setModal("add"); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 shrink-0"
+          >
+            <Icon name="Plus" size={16} /> Добавить организацию
+          </button>
+        )}
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-0 border-b border-border">
+        {[
+          { key: "orgs",   label: "Организации",  icon: "Building2" },
+          { key: "report", label: "Сводный отчёт", icon: "BarChart3" },
+        ].map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key as "orgs" | "report")}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all
+              ${tab === t.key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <Icon name={t.icon} size={15} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Report tab ── */}
+      {tab === "report" && <ConsolidatedReport />}
+
+      {/* ── Orgs tab ── */}
+      {tab === "orgs" && <>
 
       {/* Consolidated KPI */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-4">
@@ -499,6 +527,8 @@ export default function HoldingSection({ onSwitchOrg }: { onSwitchOrg: (orgId: n
           </button>
         </div>
       </div>
+
+      </> /* end orgs tab */}
 
       {/* Modals */}
       {modal === "add" && (
