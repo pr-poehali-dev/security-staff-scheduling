@@ -141,4 +141,4 @@ export interface AuthSession {
 export type Section =
   | "dashboard" | "objects" | "placements" | "employees"
   | "reports" | "fines" | "schedule" | "export" | "analytics"
-  | "users" | "settings";
+  | "users" | "holding" | "settings";

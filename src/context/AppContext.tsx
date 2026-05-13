@@ -54,6 +54,12 @@ interface AppContextValue {
   setFineReasons: (reasons: FineReason[]) => void;
 
   fines: FineRecord[];
+
+  // Global (all orgs) — for holding view
+  allLocations: Location[];
+  allEmployees: Employee[];
+  allPosts: Post[];
+  allFines: FineRecord[];
 }
 
 const Ctx = createContext<AppContextValue | null>(null);
@@ -184,6 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     posts, assignPost,
     fineReasons, setFineReasons,
     fines,
+    allLocations, allEmployees, allPosts, allFines,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "@/context/AppContext";
 import LoginScreen from "@/components/LoginScreen";
 import OrgSwitcher from "@/components/OrgSwitcher";
 import UsersSection from "@/components/UsersSection";
+import HoldingSection from "@/components/HoldingSection";
 import Icon from "@/components/ui/icon";
 import type { Section, Location, Post, FineRecord, FineReason } from "@/types";
 
@@ -32,7 +33,7 @@ function Field({ label, req, children }: { label: string; req?: boolean; childre
 const postBadge = (s: Post["status"]) => s === "covered" ? <span className="badge-active">Закрыт</span> : s === "alert" ? <span className="badge-danger">Тревога</span> : <span className="badge-warning">Вакантен</span>;
 
 // ─── Nav ─────────────────────────────────────────────────────────────────────
-const NAV_ITEMS: { key: Section; label: string; icon: string; perm?: string }[] = [
+const NAV_ITEMS: { key: Section; label: string; icon: string; perm?: string; holdingOnly?: boolean }[] = [
   { key: "dashboard",  label: "Главная",          icon: "LayoutDashboard", perm: "dashboard:view" },
   { key: "objects",    label: "Объекты",           icon: "Building2",       perm: "objects:view" },
   { key: "placements", label: "Расстановки",       icon: "MapPin",          perm: "placements:view" },
@@ -44,6 +45,7 @@ const NAV_ITEMS: { key: Section; label: string; icon: string; perm?: string }[] 
   { key: "analytics",  label: "Аналитика",         icon: "BarChart3",       perm: "analytics:view" },
   { key: "users",      label: "Пользователи",      icon: "UserCog",         perm: "users:view" },
   { key: "settings",   label: "Настройки",         icon: "Settings",        perm: "settings:edit" },
+  { key: "holding",    label: "Холдинг",           icon: "Network",         perm: "holding:view", holdingOnly: true },
 ];
 
 // ─── Location Form ────────────────────────────────────────────────────────────
@@ -646,14 +648,24 @@ function Settings() {
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 function Shell() {
-  const { session, logout, can, fines, posts, holding, currentOrg, isSuperAdmin } = useApp();
+  const { session, logout, can, fines, posts, holding, currentOrg, isSuperAdmin, switchOrg } = useApp();
   const [active, setActive] = useState<Section>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (!session) return <LoginScreen />;
 
-  const visibleNav = NAV_ITEMS.filter(item => !item.perm || can(item.perm as Parameters<typeof can>[0]));
+  // holding-only items visible only to superadmin
+  const visibleNav = NAV_ITEMS.filter(item => {
+    if (item.holdingOnly) return isSuperAdmin();
+    return !item.perm || can(item.perm as Parameters<typeof can>[0]);
+  });
   const unresolved = posts.filter(p => p.status === "alert" || p.status === "vacant").length;
+
+  const handleSwitchOrg = (orgId: number) => {
+    switchOrg(orgId);
+    setActive("dashboard");
+    setSidebarOpen(false);
+  };
 
   const renderSection = () => {
     switch (active) {
@@ -667,6 +679,7 @@ function Shell() {
       case "export":     return <ExportPage />;
       case "analytics":  return <Analytics />;
       case "users":      return <UsersSection />;
+      case "holding":    return <HoldingSection onSwitchOrg={handleSwitchOrg} />;
       case "settings":   return <Settings />;
     }
   };
@@ -706,13 +719,10 @@ function Shell() {
             </button>
           ))}
 
-          {/* Holding panel for superadmin */}
+          {/* Divider before holding section */}
           {isSuperAdmin() && (
-            <div className="mt-3 pt-3 border-t border-sidebar-border">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1.5">Холдинг</p>
-              <button onClick={() => handleNav("users")} className={`nav-item w-full ${active === "users" ? "active" : ""}`}>
-                <Icon name="Building2" size={18} /> Все организации
-              </button>
+            <div className="mt-2 pt-2 border-t border-sidebar-border">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">Управление холдингом</p>
             </div>
           )}
         </nav>
